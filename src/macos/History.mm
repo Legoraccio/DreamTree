@@ -352,10 +352,15 @@ static void DrawChip(const RepoData& d, const GraphRow& row, NSRect b) {
     }
     const Commit& cm = d.commits[(size_t)gr.commit];
     DrawText(NS(CommitSubject(d, cm)), title, titleFont, NSColor.labelColor);
-    NSString* m = NS(CommitMeta(d, cm));
+    NSString* m = NS(CommitMeta(d, cm));  // "Ada · 5 minutes ago · ", then the short id when it fits
     const CGFloat mw = TextWidth(m, small);
-    DrawText(m, meta, small, NSColor.secondaryLabelColor);
-    if (mw + 30 < w) DrawText(NS(cm.id.Hex(7)), NSMakeRect(x + mw, meta.origin.y, w - mw, meta.size.height), mono, NSColor.secondaryLabelColor);
+    if (mw + 30 < w) {
+        DrawText(m, meta, small, NSColor.secondaryLabelColor);
+        DrawText(NS(cm.id.Hex(7)), NSMakeRect(x + mw, meta.origin.y, w - mw, meta.size.height), mono, NSColor.secondaryLabelColor);
+    } else {
+        static NSCharacterSet* tail = [NSCharacterSet characterSetWithCharactersInString:@" ·"];
+        DrawText([m stringByTrimmingCharactersInSet:tail], meta, small, NSColor.secondaryLabelColor);
+    }
 }
 
 // Lines added and removed; loaded in the background for the rows on screen (merges and stashes have none).
