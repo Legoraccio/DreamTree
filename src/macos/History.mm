@@ -497,7 +497,7 @@ static void DrawChip(const RepoData& d, const GraphRow& row, NSRect b) {
 // The columns as wide as the view (the table has no horizontal scroller): the commit column takes or gives
 // the difference, down to its minimum.
 - (void)fitColumns {
-    const CGFloat avail = NSWidth(_scroll.contentView.bounds);
+    const CGFloat avail = NSWidth(_scroll.contentView.bounds) - 8;  // the inspector's rounded edge covers a few points
     NSTableColumn* commit = [_table tableColumnWithIdentifier:@"commit"];
     if (avail <= 0 || !commit) return;
     CGFloat total = 0;
