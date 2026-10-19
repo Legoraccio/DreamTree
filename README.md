@@ -13,6 +13,7 @@ colore principale) e offre anche il tema originale blu notte e oro (*tema DreamT
 segue l'aspetto chiaro o scuro e il colore di accento del sistema.
 
 ![temi](https://img.shields.io/badge/temi-Windows%20%2B%20DreamTree-E3B341)
+![licenza](https://img.shields.io/badge/licenza-PolyForm%20Noncommercial%201.0.0-1B2E5E)
 
 ## Tecnologia
 
@@ -308,3 +309,13 @@ tempi e, con un diff aperto, righe e layout in cache, e lascia che il puntatore 
 messaggi inviati alla finestra; `DREAMTREE_ACCENT=RRGGBB` sostituisce il colore principale di
 Windows e `DREAMTREE_CONTRAST=1` simula un tema a contrasto, senza toccare le impostazioni di
 sistema.
+
+## Licenza
+
+DreamTree è distribuito con la [PolyForm Noncommercial License 1.0.0](LICENSE.md): si può usare,
+studiare, modificare e condividere liberamente per scopi **non commerciali** (uso personale, studio,
+ricerca, hobby, enti non profit, scuole e università, enti pubblici), conservando l'avviso di
+copyright. L'uso commerciale non è permesso: per una licenza commerciale scrivi all'autore,
+[@Legoraccio](https://github.com/Legoraccio).
+
+Copyright (c) 2026 Roberto Di Miceli.
