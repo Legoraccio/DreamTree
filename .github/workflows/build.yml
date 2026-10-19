@@ -1,0 +1,51 @@
+# Builds DreamTree on macOS and on Windows and runs the tests of the shared core on both.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "screenshot*.png"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the app (Apple silicon + Intel)
+        run: ./build-mac.sh
+      - name: Core tests
+        run: ./tools/coretest/run.sh
+      - name: Patch tests
+        run: ./tools/patchtest/run.sh 60
+      - name: Package
+        run: ditto -c -k --keepParent bin/DreamTree.app bin/DreamTree-macOS.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DreamTree-macOS
+          path: bin/DreamTree-macOS.zip
+
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the app
+        shell: powershell
+        run: ./build.ps1
+      - name: Core tests
+        shell: powershell
+        run: ./tools/coretest/run.ps1
+      - name: Patch tests
+        shell: powershell
+        run: ./tools/patchtest/run.ps1 -Cases 60
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DreamTree-Windows
+          path: bin/DreamTree.exe

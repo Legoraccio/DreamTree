@@ -1,0 +1,9 @@
+# Windows SDK NuGet packages (downloaded by build.ps1)
+/deps/
+# build output
+/build/
+/bin/
+# a screenshot of an earlier design, with data from private repositories: not published
+/screenshot.png
+# macOS
+.DS_Store
