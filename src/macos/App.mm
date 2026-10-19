@@ -166,20 +166,22 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
 
 // The repositories open when DreamTree quit, as tabs of one window.
 - (void)restoreTabs {
-    const Settings& s = AppSettings();
+    // A copy: a window that becomes key saves the settings, which rewrites the list.
+    const std::vector<std::wstring> tabs = AppSettings().tabs;
+    const int activeTab = AppSettings().activeTab;
     DTRepoWindowController* opened = _windows.lastObject;  // a folder opened at launch
     NSWindow* anchor = opened.window;
     DTRepoWindowController* active = nil;
-    for (size_t i = 0; i < s.tabs.size(); ++i) {
-        NSString* path = NS(s.tabs[i]);
-        if (!DirExists(s.tabs[i]) || [self controllerFor:path]) continue;
+    for (size_t i = 0; i < tabs.size(); ++i) {
+        NSString* path = NS(tabs[i]);
+        if (!DirExists(tabs[i]) || [self controllerFor:path]) continue;
         DTRepoWindowController* c = [self newController:path];
         if (anchor) [anchor.tabGroup addWindow:c.window];
         else {
             [c showWindow:nil];
             anchor = c.window;
         }
-        if ((int)i == s.activeTab) active = c;
+        if ((int)i == activeTab) active = c;
     }
     if (!anchor) {
         DTRepoWindowController* c = [self newController:nil];

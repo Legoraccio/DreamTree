@@ -20,6 +20,11 @@
 #else
 #define DT_SDK_14 0
 #endif
+#if defined(__MAC_26_0) && __MAC_OS_X_VERSION_MAX_ALLOWED >= __MAC_26_0
+#define DT_SDK_26 1
+#else
+#define DT_SDK_26 0
+#endif
 
 // ---------------------------------------------------------------- helpers (Bridge.mm)
 

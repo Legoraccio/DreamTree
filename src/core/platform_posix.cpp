@@ -192,7 +192,7 @@ bool FileExists(const std::wstring& p) {
     return stat(P(p).c_str(), &st) == 0;
 }
 
-bool FileInfo(const std::wstring& path, int64_t* mtime, uint64_t* stamp) {
+bool StatFile(const std::wstring& path, int64_t* mtime, uint64_t* stamp) {
     struct stat st;
     if (stat(P(path).c_str(), &st) != 0) return false;
     if (mtime) *mtime = (int64_t)st.st_mtime;

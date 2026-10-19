@@ -30,7 +30,7 @@ std::wstring FormatClock(int64_t unixSec);  // hours and minutes, as the user's 
 bool DirExists(const std::wstring& path);
 bool FileExists(const std::wstring& path);
 // Last write time (unix seconds) and a value that changes whenever the file does. False when missing.
-bool FileInfo(const std::wstring& path, int64_t* mtime, uint64_t* stamp);
+bool StatFile(const std::wstring& path, int64_t* mtime, uint64_t* stamp);
 // Entries of a folder (without "." and ".."), with a change stamp each.
 void ListDir(const std::wstring& dir, const std::function<void(std::wstring_view name, uint64_t stamp, bool isDir)>& f);
 bool ReadWholeFile(const std::wstring& path, std::string& out, size_t maxBytes = SIZE_MAX, bool* cut = nullptr);

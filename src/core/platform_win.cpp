@@ -82,7 +82,7 @@ bool DirExists(const std::wstring& p) {
 
 bool FileExists(const std::wstring& p) { return GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES; }
 
-bool FileInfo(const std::wstring& path, int64_t* mtime, uint64_t* stamp) {
+bool StatFile(const std::wstring& path, int64_t* mtime, uint64_t* stamp) {
     WIN32_FILE_ATTRIBUTE_DATA a;
     if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &a)) return false;
     if (mtime) *mtime = UnixTime(a.ftLastWriteTime);

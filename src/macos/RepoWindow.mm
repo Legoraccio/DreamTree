@@ -1072,10 +1072,10 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
     return ok;
 }
 
-// Pull and Push show how many commits they would bring in or send (macOS 14).
+// Pull and Push show how many commits they would bring in or send (macOS 26).
 - (void)updateBadge:(NSToolbarItem*)item {
-#if DT_SDK_14
-    if (@available(macOS 14.0, *)) {
+#if DT_SDK_26
+    if (@available(macOS 26.0, *)) {
         const bool pull = [item.itemIdentifier isEqualToString:kPull], push = [item.itemIdentifier isEqualToString:kPush];
         if (!pull && !push) return;
         int n = 0;
@@ -1084,7 +1084,7 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
         int& shown = pull ? _pullBadge : _pushBadge;
         if (shown == n) return;
         shown = n;
-        item.badge = n > 0 ? [NSItemBadge countBadgeWithCount:n] : nil;
+        item.badge = n > 0 ? [NSItemBadge badgeWithCount:n] : nil;
     }
 #else
     (void)item;

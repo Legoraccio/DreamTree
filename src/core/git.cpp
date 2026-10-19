@@ -200,7 +200,7 @@ std::wstring GitVersionIfReady() { return g_gitVersionReady ? g_gitVersion : std
 
 static void StampFile(const std::wstring& p, uint64_t& h) {
     uint64_t v = 0x9E3779B97F4A7C15ULL;
-    FileInfo(p, nullptr, &v);
+    StatFile(p, nullptr, &v);
     h = (h ^ v) * 1099511628211ULL;
 }
 
@@ -575,7 +575,7 @@ std::shared_ptr<RepoData> LoadRepository(const std::wstring& path, const std::ws
     d->unborn = !headValid;
     d->refsStamp = RefsStamp(d->gitDir, d->commonDir);  // taken before reading, so later changes are noticed
     for (const std::wstring* dir : { &d->gitDir, &d->commonDir })  // the last fetch wrote FETCH_HEAD
-        if (FileInfo(PathJoin(*dir, L"FETCH_HEAD"), &d->fetchTime, nullptr)) break;
+        if (StatFile(PathJoin(*dir, L"FETCH_HEAD"), &d->fetchTime, nullptr)) break;
     const std::wstring& root = d->root;
 
     // 2. Refs and stashes in parallel with the (streamed) commit log.

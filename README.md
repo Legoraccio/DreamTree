@@ -171,7 +171,7 @@ e le stesse conferme della versione Windows:
   *Window › Merge All Windows*), riaperte all'avvio; pagina iniziale con i repository recenti e
   trascinamento di una cartella; *File › Open Recent*; una cartella trascinata sull'icona nel Dock
   si apre in DreamTree.
-- **Toolbar** unificata: barra laterale, **Fetch**, **Pull** e **Push** (da macOS 14 con il numero
+- **Toolbar** unificata: barra laterale, **Fetch**, **Pull** e **Push** (da macOS 26 con il numero
   di commit da ricevere o da inviare), **New Branch**, **Stash**, **Pop**, un indicatore di
   attività, la ricerca dei commit e il menu ⋯ (Undo/Redo, terminale, modalità di pull, aggiorna,
   Finder). Il sottotitolo della finestra mostra branch, numero di commit e ultimo fetch, e durante
