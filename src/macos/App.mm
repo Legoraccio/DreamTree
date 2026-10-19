@@ -318,56 +318,69 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
         after(0.5, step, tries + 1);
         return;
     }
+    // Each state is set, given time to load, pictured, then left on screen for the script's screenshot.
     switch (step) {
-    case 0: {  // a big window in front; the history with the uncommitted changes selected
+    case 0: {  // a big window in front, with the uncommitted changes selected
         NSWindow* w = c.window;
         [NSApp activateIgnoringOtherApps:YES];
         [w makeKeyAndOrderFront:nil];
         const NSRect vf = w.screen ? w.screen.visibleFrame : NSMakeRect(0, 0, 1440, 900);
         [w setFrame:NSMakeRect(vf.origin.x, vf.origin.y, std::min<CGFloat>(1440, vf.size.width), std::min<CGFloat>(900, vf.size.height))
             display:YES];
-        if (tries < 3) {  // let the layout settle
-            after(0.7, 0, tries + 1);
-            return;
-        }
-        [self snapshot:@"1-changes.png"];
-        [c selectCommit:s->data->headCommit];
-        after(3.0, 1, 0);
+        after(1.5, 1, 0);
         return;
     }
-    case 1:  // a commit with its files
+    case 1:
+        [self snapshot:@"1-changes.png"];
+        after(3.0, 2, 0);
+        return;
+    case 2:  // a commit with its files
+        [c selectCommit:s->data->headCommit];
+        after(1.5, 3, 0);
+        return;
+    case 3:
         if (!s->details && tries < 20) {
-            after(0.5, 1, tries + 1);
+            after(0.5, 3, tries + 1);
             return;
         }
         [self snapshot:@"2-commit.png"];
-        if (s->status && !s->status->unstaged.empty()) {
-            const FileChange* pick = &s->status->unstaged[0];
-            for (const FileChange& f : s->status->unstaged)
-                if (f.status == L'M') {
-                    pick = &f;
-                    break;
-                }
-            [c openDiff:1 path:pick->path];
-            after(3.0, 2, 0);
-        } else {
-            after(0.1, 9, 0);
-        }
+        after(3.0, 4, 0);
         return;
-    case 2:  // the diff of a modified file
+    case 4: {  // the diff of a modified file
+        if (!s->status || s->status->unstaged.empty()) {
+            after(0.1, 9, 0);
+            return;
+        }
+        const FileChange* pick = &s->status->unstaged[0];
+        for (const FileChange& f : s->status->unstaged)
+            if (f.status == L'M') {
+                pick = &f;
+                break;
+            }
+        [c openDiff:1 path:pick->path];
+        after(1.5, 5, 0);
+        return;
+    }
+    case 5:
         if (!s->diff.diff && tries < 20) {
-            after(0.5, 2, tries + 1);
+            after(0.5, 5, tries + 1);
             return;
         }
         [self snapshot:@"3-diff.png"];
+        after(3.0, 6, 0);
+        return;
+    case 6:  // the other layout
         AppSettings().diffSplit = !AppSettings().diffSplit;
         [NSNotificationCenter.defaultCenter postNotificationName:DTSettingsChangedNotification object:nil];
-        after(3.0, 3, 0);
+        after(1.0, 7, 0);
         return;
-    case 3:  // the other layout
+    case 7:
         [self snapshot:@"4-diff-split.png"];
+        after(3.0, 8, 0);
+        return;
+    case 8:
         AppSettings().diffSplit = !AppSettings().diffSplit;
-        after(3.0, 9, 0);
+        after(0.1, 9, 0);
         return;
     default:
         NSLog(@"snapshots: done");

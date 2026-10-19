@@ -176,7 +176,7 @@ e le stesse conferme della versione Windows:
   attività, la ricerca dei commit e il menu ⋯ (Undo/Redo, terminale, modalità di pull, aggiorna,
   Finder). Il sottotitolo della finestra mostra branch, numero di commit e ultimo fetch, e durante
   un'operazione il progresso di git.
-- **Barra laterale** (source list): *Uncommitted Changes* con il numero di file, *History*, poi
+- **Barra laterale** (source list): *Changes* con il numero di file, *History*, poi
   Branches, Remotes, Tags, Stashes e Submodules, con cartelle e ahead/behind; doppio clic per il
   checkout, menu contestuali.
 - **Cronologia** in una tabella con colonne ridimensionabili: chip di branch e tag con le icone

@@ -226,10 +226,10 @@ static void DrawChip(const RepoData& d, const GraphRow& row, NSRect b) {
         [self->_table addTableColumn:c];
         return c;
     };
-    NSTableColumn* refs = column(@"refs", @"Branch / Tag", std::clamp<CGFloat>(AppSettings().GetFloat(L"colRef", 170), 40, 480), 40, false);
+    NSTableColumn* refs = column(@"refs", @"Branch / Tag", std::clamp<CGFloat>(AppSettings().GetFloat(L"colRef", 150), 40, 480), 40, false);
     refs.headerCell.alignment = NSTextAlignmentRight;
     column(@"graph", @"", 80, 26, false);
-    column(@"commit", @"Commit", 420, 160, true);
+    column(@"commit", @"Commit", 420, 110, true);
     column(@"changes", @"Changes", 92, 50, false).headerCell.alignment = NSTextAlignmentRight;
     _table.dataSource = self;
     _table.delegate = self;

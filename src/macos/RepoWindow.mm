@@ -1096,7 +1096,7 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
 - (NSArray<NSToolbarItemIdentifier>*)toolbarDefaultItemIdentifiers:(NSToolbar*)toolbar {
     return @[
         NSToolbarToggleSidebarItemIdentifier, NSToolbarSidebarTrackingSeparatorItemIdentifier, kFetch, kPull, kPush, NSToolbarSpaceItemIdentifier,
-        kBranch, kStash, kPop, NSToolbarFlexibleSpaceItemIdentifier, kActivity, kSearch, kMore, kDetails
+        kBranch, kStash, kPop, NSToolbarFlexibleSpaceItemIdentifier, kSearch, kMore, kDetails
     ];
 }
 

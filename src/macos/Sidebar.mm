@@ -142,7 +142,7 @@ static NSString* AheadBehind(const Ref& r) {
     RepoSession* s = _owner.session;
     DTSideItem* selected = [_outline itemAtRow:_outline.selectedRow];
     NSString* selectedKey = selected.key;
-    _changes = Item(DTSidePage, @"Uncommitted Changes", @"page:changes", 0);
+    _changes = Item(DTSidePage, @"Changes", @"page:changes", 0);
     _history = Item(DTSidePage, @"History", @"page:history", 1);
     NSMutableArray<DTSideItem*>* roots = [NSMutableArray arrayWithObjects:_changes, _history, nil];
     if (s && s->data) {

@@ -492,6 +492,7 @@ static NSColor* FillerBg() {
     DTDiffDocView* _doc;
     NSTextField* _message;
     NSString* _shownKey;  // the file on screen: another one starts from the top
+    BOOL _hasStats;
     uint64_t _waitSeq;
     // the selected lines
     NSVisualEffectView* _bar;
@@ -616,6 +617,14 @@ static NSColor* FillerBg() {
 
 - (void)widthChanged:(NSNotification*)note {
     [_doc diffChanged:NO];
+    [self fitHeader];
+}
+
+// In a narrow view the file's path keeps its room: "unstaged" and the line counts go first.
+- (void)fitHeader {
+    const CGFloat w = NSWidth(self.view.bounds);
+    _where.hidden = w < 640;
+    _stats.hidden = !_hasStats || w < 540;
 }
 
 - (void)reload {
@@ -655,10 +664,11 @@ static NSColor* FillerBg() {
                                                                    attributes:@{ NSForegroundColorAttributeName : NSColor.systemRedColor }]];
         [st addAttribute:NSFontAttributeName value:[NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightMedium] range:NSMakeRange(0, st.length)];
         _stats.attributedStringValue = st;
-        _stats.hidden = NO;
+        _hasStats = YES;
     } else {
-        _stats.hidden = YES;
+        _hasStats = NO;
     }
+    [self fitHeader];
     _fileButton.hidden = m.req.section == 0;
     _fileButton.title = m.req.section == 1 ? @"Stage File" : @"Unstage File";
     _fileButton.enabled = !s->opBusy;
