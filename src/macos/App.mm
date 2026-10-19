@@ -136,6 +136,7 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
 - (void)applicationDidFinishLaunching:(NSNotification*)note {
     std::thread([] { GitVersion(); }).detach();  // the first git call is the slow one
     [self restoreTabs];
+    if (!EnvVar("DREAMTREE_SNAPSHOT").empty()) [self snapshotStep:0 tries:0];
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)app {
@@ -258,6 +259,95 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
     }
     for (DTRepoWindowController* c in _windows) add(c.window);  // minimized windows
     s.Save();
+}
+
+// ---- UI snapshots
+
+// DREAMTREE_SNAPSHOT=<folder>: pictures of the first window at a few steps (the uncommitted changes, a
+// commit, a diff unified and side by side) as PNG files, then quit. The CI smoke test of the interface.
+- (void)snapshot:(NSString*)name {
+    NSWindow* w = _windows.firstObject.window;
+    NSView* v = w.contentView.superview ? w.contentView.superview : w.contentView;  // with the title bar and toolbar
+    NSBitmapImageRep* rep = [v bitmapImageRepForCachingDisplayInRect:v.bounds];
+    BOOL ok = NO;
+    if (rep) {
+        [v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];
+        NSData* png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+        ok = [png writeToFile:[NS(EnvVar("DREAMTREE_SNAPSHOT")) stringByAppendingPathComponent:name] atomically:YES];
+    }
+    NSLog(@"snapshot %@: %@", name, ok ? @"saved" : @"FAILED");
+}
+
+- (void)snapshotStep:(int)step tries:(int)tries {
+    DTRepoWindowController* c = _windows.firstObject;
+    RepoSession* s = c.session;
+    void (^after)(double, int, int) = ^(double seconds, int nextStep, int nextTries) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(seconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self snapshotStep:nextStep tries:nextTries];
+        });
+    };
+    if (!s || !s->data || s->loading || s->opBusy) {  // still loading
+        if (tries >= 80) {
+            NSLog(@"snapshots: the repository did not load: %@", s ? NS(s->error) : @"no repository window");
+            [NSApp terminate:nil];
+            return;
+        }
+        after(0.5, step, tries + 1);
+        return;
+    }
+    switch (step) {
+    case 0: {  // a big window; the history with the uncommitted changes selected
+        NSWindow* w = c.window;
+        const NSRect vf = w.screen ? w.screen.visibleFrame : NSMakeRect(0, 0, 1440, 900);
+        [w setFrame:NSMakeRect(vf.origin.x, vf.origin.y, std::min<CGFloat>(1440, vf.size.width), std::min<CGFloat>(900, vf.size.height))
+            display:YES];
+        if (tries < 3) {  // let the layout settle
+            after(0.7, 0, tries + 1);
+            return;
+        }
+        [self snapshot:@"1-changes.png"];
+        [c selectCommit:s->data->headCommit];
+        after(1.0, 1, 0);
+        return;
+    }
+    case 1:  // a commit with its files
+        if (!s->details && tries < 20) {
+            after(0.5, 1, tries + 1);
+            return;
+        }
+        [self snapshot:@"2-commit.png"];
+        if (s->status && !s->status->unstaged.empty()) {
+            const FileChange* pick = &s->status->unstaged[0];
+            for (const FileChange& f : s->status->unstaged)
+                if (f.status == L'M') {
+                    pick = &f;
+                    break;
+                }
+            [c openDiff:1 path:pick->path];
+            after(1.0, 2, 0);
+        } else {
+            after(0.1, 9, 0);
+        }
+        return;
+    case 2:  // the diff of a modified file
+        if (!s->diff.diff && tries < 20) {
+            after(0.5, 2, tries + 1);
+            return;
+        }
+        [self snapshot:@"3-diff.png"];
+        AppSettings().diffSplit = !AppSettings().diffSplit;
+        [NSNotificationCenter.defaultCenter postNotificationName:DTSettingsChangedNotification object:nil];
+        after(1.0, 3, 0);
+        return;
+    case 3:  // the other layout
+        [self snapshot:@"4-diff-split.png"];
+        AppSettings().diffSplit = !AppSettings().diffSplit;
+        after(0.2, 9, 0);
+        return;
+    default:
+        NSLog(@"snapshots: done");
+        [NSApp terminate:nil];
+    }
 }
 
 // ---- commands
