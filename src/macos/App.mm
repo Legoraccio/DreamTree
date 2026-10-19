@@ -265,17 +265,40 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
 
 // DREAMTREE_SNAPSHOT=<folder>: pictures of the first window at a few steps (the uncommitted changes, a
 // commit, a diff unified and side by side) as PNG files, then quit. The CI smoke test of the interface.
+static BOOL SaveViewImage(NSView* v, NSString* path) {
+    if (!v || NSIsEmptyRect(v.bounds)) return NO;
+    NSBitmapImageRep* rep = [v bitmapImageRepForCachingDisplayInRect:v.bounds];
+    if (!rep) return NO;
+    [v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];
+    return [[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:path atomically:YES];
+}
+
+// The tables of a view and how many rows they show, for the log.
+static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
+    if ([v isKindOfClass:NSTableView.class]) [out addObject:[NSString stringWithFormat:@"%@ %ld rows", v.className, (long)((NSTableView*)v).numberOfRows]];
+    for (NSView* sub in v.subviews) CountRows(sub, out);
+}
+
+// The whole window as the views draw it, then each pane by itself: the system draws the glass of the sidebar
+// and of the inspector (macOS 26) outside the views, so the whole-window picture leaves them empty. A
+// "<name>.ready" file tells the test script to take a real screenshot now.
 - (void)snapshot:(NSString*)name {
     NSWindow* w = _windows.firstObject.window;
-    NSView* v = w.contentView.superview ? w.contentView.superview : w.contentView;  // with the title bar and toolbar
-    NSBitmapImageRep* rep = [v bitmapImageRepForCachingDisplayInRect:v.bounds];
-    BOOL ok = NO;
-    if (rep) {
-        [v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];
-        NSData* png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
-        ok = [png writeToFile:[NS(EnvVar("DREAMTREE_SNAPSHOT")) stringByAppendingPathComponent:name] atomically:YES];
+    NSString* dir = NS(EnvVar("DREAMTREE_SNAPSHOT"));
+    NSString* base = [dir stringByAppendingPathComponent:name.stringByDeletingPathExtension];
+    const BOOL ok = SaveViewImage(w.contentView.superview ? w.contentView.superview : w.contentView, [base stringByAppendingPathExtension:@"png"]);
+    NSMutableArray<NSString*>* rows = [NSMutableArray array];
+    if ([w.contentViewController isKindOfClass:NSSplitViewController.class]) {
+        NSArray<NSString*>* names = @[ @"sidebar", @"center", @"details" ];
+        NSArray<NSSplitViewItem*>* items = ((NSSplitViewController*)w.contentViewController).splitViewItems;
+        for (NSUInteger k = 0; k < items.count && k < names.count; ++k) {
+            NSView* pane = items[k].viewController.view;
+            SaveViewImage(pane, [NSString stringWithFormat:@"%@-%@.png", base, names[k]]);
+            CountRows(pane, rows);
+        }
     }
-    NSLog(@"snapshot %@: %@", name, ok ? @"saved" : @"FAILED");
+    [[NSData data] writeToFile:[base stringByAppendingPathExtension:@"ready"] atomically:YES];
+    NSLog(@"snapshot %@: %@; %@", name, ok ? @"saved" : @"FAILED", [rows componentsJoinedByString:@", "]);
 }
 
 - (void)snapshotStep:(int)step tries:(int)tries {
@@ -296,8 +319,10 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
         return;
     }
     switch (step) {
-    case 0: {  // a big window; the history with the uncommitted changes selected
+    case 0: {  // a big window in front; the history with the uncommitted changes selected
         NSWindow* w = c.window;
+        [NSApp activateIgnoringOtherApps:YES];
+        [w makeKeyAndOrderFront:nil];
         const NSRect vf = w.screen ? w.screen.visibleFrame : NSMakeRect(0, 0, 1440, 900);
         [w setFrame:NSMakeRect(vf.origin.x, vf.origin.y, std::min<CGFloat>(1440, vf.size.width), std::min<CGFloat>(900, vf.size.height))
             display:YES];
@@ -307,7 +332,7 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
         }
         [self snapshot:@"1-changes.png"];
         [c selectCommit:s->data->headCommit];
-        after(1.0, 1, 0);
+        after(3.0, 1, 0);
         return;
     }
     case 1:  // a commit with its files
@@ -324,7 +349,7 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
                     break;
                 }
             [c openDiff:1 path:pick->path];
-            after(1.0, 2, 0);
+            after(3.0, 2, 0);
         } else {
             after(0.1, 9, 0);
         }
@@ -337,12 +362,12 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
         [self snapshot:@"3-diff.png"];
         AppSettings().diffSplit = !AppSettings().diffSplit;
         [NSNotificationCenter.defaultCenter postNotificationName:DTSettingsChangedNotification object:nil];
-        after(1.0, 3, 0);
+        after(3.0, 3, 0);
         return;
     case 3:  // the other layout
         [self snapshot:@"4-diff-split.png"];
         AppSettings().diffSplit = !AppSettings().diffSplit;
-        after(0.2, 9, 0);
+        after(3.0, 9, 0);
         return;
     default:
         NSLog(@"snapshots: done");
