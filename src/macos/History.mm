@@ -416,6 +416,7 @@ static void DrawChip(const RepoData& d, const GraphRow& row, NSRect b) {
     if (s && s->graph && !s->lastLoadRefresh) {  // a new repository or scope: a graph column as wide as its lanes
         NSTableColumn* c = [_table tableColumnWithIdentifier:@"graph"];
         c.width = std::clamp<CGFloat>(kLaneX0 * 2 + (s->graph->maxLanes - 1) * kLaneW, 40, 260);
+        [self fitColumns];
     }
     _syncing = YES;
     [_table reloadData];
@@ -491,6 +492,23 @@ static void DrawChip(const RepoData& d, const GraphRow& row, NSRect b) {
     if (s && s->graph && s->graph->hasWip && _table.numberOfRows > 0)  // its counts
         [_table reloadDataForRowIndexes:[NSIndexSet indexSetWithIndex:0]
                           columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, (NSUInteger)_table.numberOfColumns)]];
+}
+
+// The columns as wide as the view (the table has no horizontal scroller): the commit column takes or gives
+// the difference, down to its minimum.
+- (void)fitColumns {
+    const CGFloat avail = NSWidth(_scroll.contentView.bounds);
+    NSTableColumn* commit = [_table tableColumnWithIdentifier:@"commit"];
+    if (avail <= 0 || !commit) return;
+    CGFloat total = 0;
+    for (NSTableColumn* c in _table.tableColumns) total += c.width;
+    const CGFloat want = std::max(commit.minWidth, commit.width + avail - total);
+    if (fabs(want - commit.width) > 0.5) commit.width = want;
+}
+
+- (void)viewDidLayout {
+    [super viewDidLayout];
+    [self fitColumns];
 }
 
 - (void)focusTable {
