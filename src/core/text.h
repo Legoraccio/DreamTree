@@ -21,6 +21,7 @@ std::wstring FormatCount(size_t n);            // thousands separators
 std::wstring Plural(size_t n, const wchar_t* one, const wchar_t* many);  // "1 file", "3 files"
 
 uint32_t Fnv1a(std::string_view s);
+std::string Base64(std::string_view s);
 uint32_t Fnv1aW(std::wstring_view s);
 
 // Command lines: QuoteArg quotes one argument (Windows rules); SplitCommandLine is its inverse, used on

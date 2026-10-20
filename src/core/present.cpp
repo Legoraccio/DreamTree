@@ -1,4 +1,5 @@
 #include "present.h"
+#include "platform.h"
 #include "text.h"
 #include <cstdlib>
 
@@ -155,6 +156,38 @@ Prompt RevertPrompt(const RepoData& d, int32_t commit) {
                 (c.parentCount > 1 ? L"\n\nThis is a merge: the changes it brought in from the merged branch are undone." : L"");
     p.buttons = { L"Revert", L"Cancel" };
     return p;
+}
+
+Prompt RemoveAccountPrompt(const Account& a) {
+    Prompt p;
+    p.title = std::wstring(L"Remove the ") + InfoOf(a.forge).name + L" account " + a.login + L"?";
+    p.message = L"DreamTree forgets the account and deletes its token from " + SecretStoreName() + L". The token stays valid on " + a.Host() +
+                L": revoke it there if you no longer need it.";
+    p.buttons = { L"Remove", L"Cancel" };
+    p.defaultButton = 1;
+    p.danger = 0;
+    return p;
+}
+
+// ---------------------------------------------------------------- settings
+
+const std::vector<std::wstring>& PullModeLabels() {
+    static const std::vector<std::wstring> labels = { L"Merge (fast-forward if possible)", L"Fast-forward only", L"Rebase" };
+    return labels;
+}
+
+std::wstring PullModeHelp() {
+    return L"How Pull brings in the commits of the upstream branch. Uncommitted changes are set aside and put back afterwards.";
+}
+
+std::wstring AccountsIntro() {
+    return L"Connect your accounts to fetch, pull and push over HTTPS without being asked for a password. Each token is kept in " +
+           SecretStoreName() + L", never in DreamTree's files, and is sent only to its own server.";
+}
+
+std::wstring TrustedHelp() {
+    return L"Repositories in these folders belong to another user account; DreamTree opens them anyway (git's safe.directory, for "
+           L"DreamTree only). Folders are added with “Trust” when DreamTree can't open a repository.";
 }
 
 Prompt DiscardPatchPrompt(const PatchJob& job, const std::wstring& path) {

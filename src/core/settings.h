@@ -12,6 +12,8 @@ public:
     std::vector<std::wstring> trusted;  // folders trusted despite another owner (safe.directory)
     std::vector<std::wstring> tabs;     // repositories open at exit
     int activeTab = 0;
+    bool restoreTabs = true;            // reopen them at launch
+    std::vector<std::wstring> accounts;  // see accounts.h (no secrets here)
 
     void Load();
     bool Save() const;

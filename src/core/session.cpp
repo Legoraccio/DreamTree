@@ -495,7 +495,7 @@ void RepoSession::RunOp(int button, const std::wstring& label, std::function<OpO
     opStart = NowMs();
     std::weak_ptr<RepoSession> wk = shared_from_this();
     auto lastPost = std::make_shared<std::atomic<double>>(0.0);
-    OpCtx ctx{ data->root, data->safeDir, nullptr };
+    OpCtx ctx{ data->root, data->safeDir, nullptr, LoadAccounts() };
     ctx.progress = [wk, lastPost](const std::string& line) {
         const double now = NowMs();
         if (now - lastPost->load() < 50) return;  // ~20 updates per second are plenty
@@ -601,7 +601,7 @@ void RepoSession::Fetch() {
     }
     RunOp(ActFetch, L"Fetching", [](const OpCtx& c) {
         OpOutcome o;
-        GitOpResult r = c.Run(L"fetch --all --prune --progress");
+        GitOpResult r = c.RunNet(L"fetch --all --prune --progress");
         o.ok = r.ok();
         o.title = o.ok ? L"Fetch complete" : L"Fetch failed";
         o.message = o.ok ? L"Remote branches and tags are up to date." : GitErrorText(r);
@@ -622,7 +622,7 @@ void RepoSession::Pull() {
                                           : L"pull --no-rebase --no-edit --autostash --progress";
     RunOp(ActPull, L"Pulling", [args](const OpCtx& c) {
         OpOutcome o;
-        GitOpResult r = c.Run(args);
+        GitOpResult r = c.RunNet(args);
         o.ok = r.ok();
         if (o.ok) {
             o.title = L"Pull complete";
@@ -660,7 +660,7 @@ void RepoSession::Push(bool force) {
             target = remote + L"/" + branch;
         }
         if (force) args += L" --force-with-lease";
-        GitOpResult r = c.Run(args);
+        GitOpResult r = c.RunNet(args);
         if (r.ok()) {
             o.ok = true;
             o.title = force ? L"Force push complete" : L"Push complete";

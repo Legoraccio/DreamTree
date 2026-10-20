@@ -148,6 +148,17 @@ extern NSString* const DTSettingsChangedNotification;  // pull mode or diff layo
 - (IBAction)closeDiff:(id)sender;
 @end
 
+// Settings, by category: General, Appearance, Git, Integrations (Preferences.mm).
+@interface DTPreferencesController : NSWindowController
++ (instancetype)shared;
+- (void)showPane:(NSString*)identifier;  // general, appearance, git, integrations
+- (void)openAddAccount;                  // the sheet that connects an account
+- (void)closeSheets;
+- (NSWindow*)sheetWindow;                // the open sheet, or nil
+@end
+
+void ApplyAppearance();  // light, dark or the system's, as the settings say
+
 @interface DTAppDelegate : NSObject <NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation>
 - (void)openRepository:(NSString*)path from:(DTRepoWindowController*)origin;
 - (void)windowClosed:(DTRepoWindowController*)controller;

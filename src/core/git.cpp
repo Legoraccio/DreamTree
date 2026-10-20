@@ -56,7 +56,7 @@ static int RunGit(const std::wstring& cwd, const std::wstring& args, std::string
 }
 
 GitOpResult RunGitOp(const std::wstring& root, const std::wstring& safeDir, const std::wstring& args,
-                     const std::function<void(const std::string&)>& progress) {
+                     const std::function<void(const std::string&)>& progress, const std::vector<std::string>& env) {
     GitOpResult r;
     std::wstring cmd = L"--no-pager -c core.quotepath=false -c color.ui=false ";
     if (!safeDir.empty()) cmd += L"-c " + QuoteArg(L"safe.directory=" + safeDir) + L" ";
@@ -74,7 +74,7 @@ GitOpResult RunGitOp(const std::wstring& root, const std::wstring& safeDir, cons
             }
         }
     };
-    r.code = RunProcess(GitPath(true), cmd, root, &r.out, &r.err, nullptr, errSink);
+    r.code = RunProcess(GitPath(true), cmd, root, &r.out, &r.err, nullptr, errSink, env);
     return r;
 }
 

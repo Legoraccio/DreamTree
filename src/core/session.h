@@ -1,4 +1,5 @@
 #pragma once
+#include "accounts.h"
 #include "git.h"
 #include "watcher.h"
 
@@ -26,7 +27,10 @@ struct UndoEntry {
 struct OpCtx {
     std::wstring root, safe;
     std::function<void(const std::string&)> progress;
+    std::vector<Account> accounts;  // as when the operation started
     GitOpResult Run(const std::wstring& args) const { return RunGitOp(root, safe, args, progress); }
+    // fetch, pull, push: HTTPS requests to the accounts' servers carry their tokens
+    GitOpResult RunNet(const std::wstring& args) const { return RunGitOp(root, safe, args, progress, GitAuthEnvironment(accounts)); }
 };
 
 struct OpOutcome {

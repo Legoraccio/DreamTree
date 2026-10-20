@@ -140,7 +140,8 @@ bool App::Create(HINSTANCE inst, int show) {
     }
 
     // Tabs: restore the previous session, then command-line folders.
-    for (auto& p : AppSettings().tabs) tabs.push_back(MakeTab(p));
+    if (AppSettings().restoreTabs)
+        for (auto& p : AppSettings().tabs) tabs.push_back(MakeTab(p));
     active = std::clamp(AppSettings().activeTab, 0, std::max(0, (int)tabs.size() - 1));
     int argc = 0;
     if (LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc)) {

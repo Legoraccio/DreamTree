@@ -24,6 +24,7 @@ void Settings::Load() {
     recent.clear();
     trusted.clear();
     tabs.clear();
+    accounts.clear();
     values.clear();
     for (size_t p = 0; p < text.size();) {
         size_t e = text.find(L'\n', p);
@@ -40,6 +41,8 @@ void Settings::Load() {
         else if (k == L"trusted") { if (!v.empty()) Trust(v); }
         else if (k == L"tab") { if (!v.empty()) tabs.push_back(v); }
         else if (k == L"active") activeTab = (int)std::wcstol(v.c_str(), nullptr, 10);
+        else if (k == L"restoreTabs") restoreTabs = v != L"0";
+        else if (k == L"account") { if (!v.empty()) accounts.push_back(v); }
         else Set(k, v);
     }
 }
@@ -57,6 +60,8 @@ bool Settings::Save() const {
     kv(L"diffSplit", diffSplit ? L"1" : L"0");
     for (const auto& t : tabs) kv(L"tab", t);
     kv(L"active", std::to_wstring(activeTab));
+    kv(L"restoreTabs", restoreTabs ? L"1" : L"0");
+    for (const auto& a : accounts) kv(L"account", a);
     for (const auto& r : recent) kv(L"recent", r);
     for (const auto& t : trusted) kv(L"trusted", t);
     return WriteFileAtomic(SettingsPath(), Narrow(s));

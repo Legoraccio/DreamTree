@@ -59,7 +59,7 @@ for p in "${pids[@]}"; do wait "$p" || failed=1; done
 
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-"$cxx" "${flags[@]}" "${objects[@]}" -framework Cocoa -framework CoreServices -framework CoreFoundation \
+"$cxx" "${flags[@]}" "${objects[@]}" -framework Cocoa -framework CoreServices -framework CoreFoundation -framework Security -lcurl \
     -o "$app/Contents/MacOS/DreamTree"
 cp "$root/src/macos/Info.plist" "$app/Contents/Info.plist"
 printf 'APPL????' >"$app/Contents/PkgInfo"

@@ -3,6 +3,7 @@
 // repository made in the temp folder and read through git.
 //
 //   coretest        (run.ps1 / run.sh build and run it)
+#include "accounts.h"
 #include "git.h"
 #include "navtree.h"
 #include "platform.h"
@@ -128,6 +129,64 @@ static void TestSettings(const std::filesystem::path& dir) {
     CHECK(b.recent.size() == 2 && b.recent[0] == Native(L"/work/two"));
 }
 
+// ---------------------------------------------------------------- accounts
+
+static void TestAccounts(const std::filesystem::path& dir) {
+    CHECK(Base64("") == "" && Base64("M") == "TQ==" && Base64("Ma") == "TWE=" && Base64("Man") == "TWFu");
+    CHECK(Base64("octocat:ghp_x") == "b2N0b2NhdDpnaHBfeA==");
+    std::wstring why;
+    CHECK(NormalizeServer(L" gitlab.example.com/ ", &why) == L"https://gitlab.example.com");
+    CHECK(NormalizeServer(L"https://GitHub.com", &why) == L"https://github.com");
+    CHECK(NormalizeServer(L"https://example.com/git/Lab/", &why) == L"https://example.com/git/Lab");
+    CHECK(NormalizeServer(L"http://example.com", &why).empty() && !why.empty());
+    CHECK(NormalizeServer(L"", &why).empty());
+    CHECK(TokenPageUrl(Forge::GitHub, L"https://github.com").rfind(L"https://github.com/settings/tokens/new?", 0) == 0);
+    CHECK(TokenPageUrl(Forge::GitLab, L"https://gitlab.com").find(L"scopes=read_user,read_repository,write_repository") != std::wstring::npos);
+    const TokenCheck bad = CheckToken(Forge::GitHub, L"http://github.com", "x");
+    CHECK(!bad.ok && !bad.error.empty());
+
+    // The account list lives in the settings, the tokens don't.
+    Settings& s = AppSettings();
+    const std::vector<std::wstring> before = s.accounts;
+    s.accounts = { L"gitlab\thttps://gitlab.example.com\tada\tAda Lovelace", L"nonsense", L"github\thttps://github.com\toctocat\t" };
+    const std::vector<Account> list = LoadAccounts();
+    CHECK(list.size() == 2);
+    if (list.size() == 2) {
+        CHECK(list[0].forge == Forge::GitLab && list[0].server == L"https://gitlab.example.com" && list[0].login == L"ada" &&
+              list[0].name == L"Ada Lovelace");
+        CHECK(list[1].forge == Forge::GitHub && list[1].Host() == L"github.com" && list[1].name.empty());
+    }
+    s.accounts = before;
+
+    // git reads the authorization from the environment, for the server's addresses only.
+    const std::wstring root = (dir / L"auth").wstring();
+    std::filesystem::create_directories(root);
+    const std::vector<std::string> env = { "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.https://example.com/.extraHeader",
+                                           "GIT_CONFIG_VALUE_0=Authorization: Basic b2N0b2NhdDpnaHBfeA==" };
+    const GitOpResult on = RunGitOp(root, L"", L"config --get-urlmatch http.extraheader https://example.com/team/repo.git", nullptr, env);
+    CHECK(on.ok() && std::string(TrimSv(on.out)) == "Authorization: Basic b2N0b2NhdDpnaHBfeA==");
+    const GitOpResult off = RunGitOp(root, L"", L"config --get-urlmatch http.extraheader https://other.example.org/repo.git", nullptr, env);
+    CHECK(!off.ok() && TrimSv(off.out).empty());
+
+#ifdef _WIN32  // the credential store (the keychain needs a logged-in user, which CI on macOS may not have)
+    const Account a{ Forge::Gitea, L"https://git.example.com", L"tester", L"" };
+    const std::wstring key = L"coretest:" + std::to_wstring(UnixNow());
+    CHECK(SecretSave(key, "s3cret", L"DreamTree core test"));
+    std::string got;
+    CHECK(SecretLoad(key, got) && got == "s3cret");
+    SecretDelete(key);
+    CHECK(!SecretLoad(key, got));
+    std::wstring err;
+    CHECK(AddAccount(a, "tok3n", &err));
+    const std::vector<std::string> authEnv = GitAuthEnvironment({ a });
+    CHECK(authEnv.size() == 3 && authEnv[0] == "GIT_CONFIG_COUNT=1" && authEnv[1] == "GIT_CONFIG_KEY_0=http.https://git.example.com/.extraHeader" &&
+          authEnv[2] == "GIT_CONFIG_VALUE_0=Authorization: Basic " + Base64("tester:tok3n"));
+    RemoveAccount(a);
+    CHECK(GitAuthEnvironment({ a }).empty());
+    CHECK(LoadAccounts().size() == before.size());
+#endif
+}
+
 // ---------------------------------------------------------------- a real repository
 
 static bool Git(const std::wstring& root, const std::wstring& args) {
@@ -211,6 +270,7 @@ static int Run() {
     const std::filesystem::path dir = std::filesystem::temp_directory_path(ec) / ("dreamtree-coretest-" + std::to_string(UnixNow()));
     std::filesystem::create_directories(dir, ec);
     TestSettings(dir);
+    TestAccounts(dir);
     TestRepository(dir);
     std::filesystem::remove_all(dir, ec);
     std::printf("coretest: %d checks, %d failed\n", g_checks, g_failed);

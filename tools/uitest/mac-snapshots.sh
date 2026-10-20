@@ -56,13 +56,13 @@ put src/util.h 'int add(int a, int b);\nint sub(int a, int b);\nint mul(int a, i
 
 # ---- the app
 settings="$work/settings.ini"
-printf 'tab=%s\nactive=0\nrecent=%s\n' "$repo" "$repo" >"$settings"
+printf 'tab=%s\nactive=0\nrecent=%s\naccount=github\thttps://github.com\toctocat\tThe Octocat\n' "$repo" "$repo" >"$settings"
 DREAMTREE_SETTINGS="$settings" DREAMTREE_SNAPSHOT="$out" "$app" >"$out/app.log" 2>&1 &
 pid=$!
 status=0
 # A real screenshot whenever the app says a step is on screen ("<step>.ready"): the system draws the glass of
 # the sidebar and of the inspector itself, and the app's own pictures can't show it.
-for _ in $(seq 1 240); do
+for _ in $(seq 1 360); do
     kill -0 "$pid" 2>/dev/null || break
     for ready in "$out"/*.ready; do
         [ -e "$ready" ] || continue
@@ -77,7 +77,7 @@ for _ in $(seq 1 240); do
     sleep 0.5
 done
 if kill -0 "$pid" 2>/dev/null; then
-    echo "The app did not finish in 2 minutes." >&2
+    echo "The app did not finish in 3 minutes." >&2
     kill "$pid" || true
     status=1
 else
@@ -85,7 +85,7 @@ else
 fi
 cat "$out/app.log"
 ls -l "$out"
-for f in 1-changes 2-commit 3-diff 4-diff-split; do
+for f in 1-changes 2-commit 3-diff 4-diff-split 5-settings-general 6-settings-appearance 7-settings-git 8-settings-integrations 9-add-account; do
     [ -s "$out/$f.png" ] || { echo "Missing $f.png" >&2; status=1; }
 done
 exit "$status"

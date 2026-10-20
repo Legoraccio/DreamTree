@@ -223,7 +223,7 @@ struct GitOpResult {
 // credential manager behave as in a terminal). Terminal prompts are disabled. `progress` receives each
 // progress line git writes on stderr (called on a worker thread).
 GitOpResult RunGitOp(const std::wstring& root, const std::wstring& safeDir, const std::wstring& args,
-                     const std::function<void(const std::string&)>& progress = nullptr);
+                     const std::function<void(const std::string&)>& progress = nullptr, const std::vector<std::string>& env = {});
 std::wstring GitErrorText(const GitOpResult& r);         // readable summary of git's error output
 std::wstring CheckBranchName(const std::wstring& name);  // empty when valid (git check-ref-format rules)
 std::wstring ReadHeadMessage(const std::wstring& root, const std::wstring& safeDir);  // full message of HEAD, as written

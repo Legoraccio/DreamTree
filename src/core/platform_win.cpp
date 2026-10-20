@@ -9,6 +9,11 @@
 #include <windows.h>
 #include <shlobj.h>
 #include <shlwapi.h>
+#include <wincred.h>
+#include <cctype>
+#include <winhttp.h>
+#pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "winhttp.lib")
 
 #include "platform.h"
 #include "text.h"
@@ -240,8 +245,36 @@ static const std::vector<wchar_t>& GitEnv() {
     return block;
 }
 
+// git's environment plus `extra` ("NAME=value", UTF-8), which replaces variables of the same name.
+static std::vector<wchar_t> EnvWith(const std::vector<std::string>& extra) {
+    std::vector<std::wstring> add;
+    for (const std::string& kv : extra) add.push_back(Widen(kv));
+    auto nameOf = [](std::wstring_view kv) { return kv.substr(0, kv.find(L'=', 1)); };
+    std::vector<wchar_t> block;
+    const std::vector<wchar_t>& base = GitEnv();
+    for (size_t p = 0; p < base.size() && base[p];) {
+        const std::wstring_view kv(base.data() + p);
+        bool replaced = false;
+        for (const std::wstring& a : add)
+            replaced |= CompareStringOrdinal(nameOf(kv).data(), (int)nameOf(kv).size(), nameOf(a).data(), (int)nameOf(a).size(), TRUE) == CSTR_EQUAL;
+        if (!replaced) {
+            block.insert(block.end(), kv.begin(), kv.end());
+            block.push_back(0);
+        }
+        p += kv.size() + 1;
+    }
+    for (const std::wstring& a : add) {
+        block.insert(block.end(), a.begin(), a.end());
+        block.push_back(0);
+    }
+    block.push_back(0);
+    return block;
+}
+
 int RunProcess(const std::wstring& exe, const std::wstring& args, const std::wstring& cwd, std::string* out, std::string* err,
-               const Sink& sink, const Sink& errSink) {
+               const Sink& sink, const Sink& errSink, const std::vector<std::string>& env) {
+    const std::vector<wchar_t> customEnv = env.empty() ? std::vector<wchar_t>() : EnvWith(env);
+    const wchar_t* envBlock = env.empty() ? GitEnv().data() : customEnv.data();
     SECURITY_ATTRIBUTES sa{ sizeof(sa), nullptr, TRUE };
     HANDLE outR = nullptr, outW = nullptr, errR = nullptr, errW = nullptr;
     if (!CreatePipe(&outR, &outW, &sa, 1 << 20)) return -1;
@@ -271,7 +304,7 @@ int RunProcess(const std::wstring& exe, const std::wstring& args, const std::wst
     PROCESS_INFORMATION pi{};
     const BOOL ok = CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, TRUE,
                                    CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
-                                   (LPVOID)GitEnv().data(), cwd.empty() ? nullptr : cwd.c_str(), &si.StartupInfo, &pi);
+                                   (LPVOID)envBlock, cwd.empty() ? nullptr : cwd.c_str(), &si.StartupInfo, &pi);
     const DWORD startErr = ok ? 0 : GetLastError();
     DeleteProcThreadAttributeList(attrs);
     CloseHandle(outW);
@@ -315,6 +348,129 @@ int RunProcess(const std::wstring& exe, const std::wstring& args, const std::wst
     if (err) *err = std::move(errBuf);
     return (int)code;
 }
+
+// ============================================================================ network
+
+static std::string WinHttpErrorText(DWORD e) {
+    wchar_t* buf = nullptr;
+    const DWORD n = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_HMODULE | FORMAT_MESSAGE_FROM_SYSTEM |
+                                       FORMAT_MESSAGE_IGNORE_INSERTS,
+                                   GetModuleHandleW(L"winhttp.dll"), e, 0, (LPWSTR)&buf, 0, nullptr);
+    std::wstring s = n && buf ? TrimW(buf) : L"network error " + std::to_wstring(e);
+    if (buf) LocalFree(buf);
+    return Narrow(s);
+}
+
+HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& headers) {
+    HttpResponse r;
+    const std::wstring wurl = Widen(url);
+    URL_COMPONENTS uc{};
+    uc.dwStructSize = sizeof(uc);
+    uc.dwSchemeLength = uc.dwHostNameLength = uc.dwUrlPathLength = uc.dwExtraInfoLength = (DWORD)-1;
+    if (!WinHttpCrackUrl(wurl.c_str(), 0, 0, &uc) || uc.nScheme != INTERNET_SCHEME_HTTPS || !uc.lpszHostName) {
+        r.error = "only https:// addresses are supported";
+        return r;
+    }
+    const std::wstring host(uc.lpszHostName, uc.dwHostNameLength);
+    std::wstring path = uc.lpszUrlPath ? std::wstring(uc.lpszUrlPath, uc.dwUrlPathLength) : std::wstring();
+    if (uc.lpszExtraInfo) path.append(uc.lpszExtraInfo, uc.dwExtraInfoLength);
+    if (path.empty()) path = L"/";
+    struct Handle {
+        HINTERNET h = nullptr;
+        ~Handle() {
+            if (h) WinHttpCloseHandle(h);
+        }
+    };
+    Handle session, connect, request;
+    session.h = WinHttpOpen(L"DreamTree", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!session.h) session.h = WinHttpOpen(L"DreamTree", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (session.h) {
+        WinHttpSetTimeouts(session.h, 10000, 10000, 20000, 20000);
+        connect.h = WinHttpConnect(session.h, host.c_str(), uc.nPort, 0);
+    }
+    if (connect.h)
+        request.h = WinHttpOpenRequest(connect.h, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+    if (!request.h) {
+        r.error = WinHttpErrorText(GetLastError());
+        return r;
+    }
+    DWORD noRedirects = WINHTTP_DISABLE_REDIRECTS;
+    WinHttpSetOption(request.h, WINHTTP_OPTION_DISABLE_FEATURE, &noRedirects, sizeof noRedirects);
+    std::wstring hs;
+    for (const std::string& h : headers) hs += Widen(h) + L"\r\n";
+    if (!WinHttpSendRequest(request.h, hs.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS : hs.c_str(), hs.empty() ? 0 : (DWORD)-1L,
+                            WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+        !WinHttpReceiveResponse(request.h, nullptr)) {
+        r.error = WinHttpErrorText(GetLastError());
+        return r;
+    }
+    DWORD status = 0, size = sizeof(status);
+    WinHttpQueryHeaders(request.h, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &status, &size,
+                        WINHTTP_NO_HEADER_INDEX);
+    r.status = (int)status;
+    DWORD rawSize = 0;
+    WinHttpQueryHeaders(request.h, WINHTTP_QUERY_RAW_HEADERS_CRLF, WINHTTP_HEADER_NAME_BY_INDEX, WINHTTP_NO_OUTPUT_BUFFER, &rawSize,
+                        WINHTTP_NO_HEADER_INDEX);
+    if (rawSize) {
+        std::wstring raw(rawSize / sizeof(wchar_t) + 1, L'\0');
+        if (WinHttpQueryHeaders(request.h, WINHTTP_QUERY_RAW_HEADERS_CRLF, WINHTTP_HEADER_NAME_BY_INDEX, raw.data(), &rawSize,
+                                WINHTTP_NO_HEADER_INDEX)) {
+            const std::string text = Narrow(std::wstring_view(raw.data(), rawSize / sizeof(wchar_t)));
+            for (size_t p = 0; p < text.size();) {
+                size_t e = text.find('\n', p);
+                if (e == std::string::npos) e = text.size();
+                const std::string_view line = TrimSv(std::string_view(text).substr(p, e - p));
+                const size_t colon = line.find(':');
+                if (colon != std::string_view::npos) {
+                    std::string name(TrimSv(line.substr(0, colon)));
+                    for (char& c : name) c = (char)std::tolower((unsigned char)c);
+                    r.headers.emplace_back(std::move(name), std::string(TrimSv(line.substr(colon + 1))));
+                }
+                p = e + 1;
+            }
+        }
+    }
+    for (;;) {
+        DWORD avail = 0, got = 0;
+        if (!WinHttpQueryDataAvailable(request.h, &avail) || !avail) break;
+        const size_t at = r.body.size();
+        r.body.resize(at + avail);
+        if (!WinHttpReadData(request.h, r.body.data() + at, avail, &got)) got = 0;
+        r.body.resize(at + got);
+        if (!got || r.body.size() > (4u << 20)) break;
+    }
+    return r;
+}
+
+// ============================================================================ secrets (Windows Credential Manager)
+
+static std::wstring CredentialTarget(const std::wstring& key) { return L"DreamTree:" + key; }
+
+bool SecretSave(const std::wstring& key, const std::string& secret, const std::wstring& label) {
+    std::wstring target = CredentialTarget(key), comment = label, user = L"DreamTree";
+    CREDENTIALW c{};
+    c.Type = CRED_TYPE_GENERIC;
+    c.TargetName = target.data();
+    c.Comment = comment.data();
+    c.UserName = user.data();
+    c.CredentialBlobSize = (DWORD)secret.size();
+    c.CredentialBlob = (LPBYTE)secret.data();
+    c.Persist = CRED_PERSIST_LOCAL_MACHINE;  // this user on this computer, not roaming
+    return secret.size() <= CRED_MAX_CREDENTIAL_BLOB_SIZE && CredWriteW(&c, 0) != FALSE;
+}
+
+bool SecretLoad(const std::wstring& key, std::string& secret) {
+    PCREDENTIALW c = nullptr;
+    if (!CredReadW(CredentialTarget(key).c_str(), CRED_TYPE_GENERIC, 0, &c) || !c) return false;
+    secret.assign(reinterpret_cast<const char*>(c->CredentialBlob), c->CredentialBlobSize);
+    SecureZeroMemory(c->CredentialBlob, c->CredentialBlobSize);
+    CredFree(c);
+    return true;
+}
+
+void SecretDelete(const std::wstring& key) { CredDeleteW(CredentialTarget(key).c_str(), CRED_TYPE_GENERIC, 0); }
+
+std::wstring SecretStoreName() { return L"Windows Credential Manager"; }
 
 // ============================================================================ file watcher
 

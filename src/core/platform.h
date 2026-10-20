@@ -46,10 +46,38 @@ using Sink = std::function<void(const char*, size_t)>;
 // Windows, which prepares ssh, hooks and the credential manager like a terminal does).
 std::wstring GitPath(bool forWrites);
 // Runs `exe` with `args` (a command line quoted with QuoteArg) in `cwd`, with git's environment: no terminal
-// prompts, English messages. stdout goes to `outSink` when set, else to *out; stderr to *err and errSink.
-// Returns the exit code, or -1 when the program could not start (the reason in *err).
+// prompts, English messages, plus the "NAME=value" entries of `env`. stdout goes to `outSink` when set, else to
+// *out; stderr to *err and errSink. Returns the exit code, or -1 when the program could not start (the reason
+// in *err).
 int RunProcess(const std::wstring& exe, const std::wstring& args, const std::wstring& cwd, std::string* out, std::string* err,
-               const Sink& outSink = nullptr, const Sink& errSink = nullptr);
+               const Sink& outSink = nullptr, const Sink& errSink = nullptr, const std::vector<std::string>& env = {});
+
+// ---------------------------------------------------------------- network
+// An HTTPS GET request, without following redirects. Blocking: call it on a worker thread.
+struct HttpResponse {
+    int status = 0;  // 0: no answer (error says why)
+    std::string body, error;
+    std::vector<std::pair<std::string, std::string>> headers;  // names in lower case
+    bool Has(std::string_view name) const {
+        for (const auto& h : headers)
+            if (h.first == name) return true;
+        return false;
+    }
+    std::string Header(std::string_view name) const {
+        for (const auto& h : headers)
+            if (h.first == name) return h.second;
+        return {};
+    }
+};
+HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& headers);  // "Name: value" headers
+
+// ---------------------------------------------------------------- secrets
+// The user's credential store (Windows Credential Manager, the macOS keychain): secrets stay there, never in
+// DreamTree's files. `key` names the secret, `label` describes it to the user.
+bool SecretSave(const std::wstring& key, const std::string& secret, const std::wstring& label);
+bool SecretLoad(const std::wstring& key, std::string& secret);
+void SecretDelete(const std::wstring& key);
+std::wstring SecretStoreName();  // "Windows Credential Manager", "the macOS keychain" (for the middle of a sentence)
 
 // ---------------------------------------------------------------- threads
 // Each app installs how a function is run on its UI thread; the core posts its results through it.

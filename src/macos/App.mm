@@ -20,82 +20,6 @@ int main(int argc, const char* argv[]) {
     return 0;
 }
 
-// ---------------------------------------------------------------- Settings window
-
-@interface DTSettingsController : NSWindowController
-@end
-
-@implementation DTSettingsController {
-    NSPopUpButton* _pull;
-    NSPopUpButton* _diff;
-    NSTextField* _git;
-}
-
-- (instancetype)init {
-    NSWindow* w = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 460, 150)
-                                              styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
-                                                backing:NSBackingStoreBuffered
-                                                  defer:YES];
-    w.title = @"Settings";
-    w.releasedWhenClosed = NO;
-    if (!(self = [super initWithWindow:w])) return nil;
-    _pull = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
-    [_pull addItemsWithTitles:@[ @"Merge (fast-forward if possible)", @"Fast-forward only", @"Rebase" ]];
-    _diff = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
-    [_diff addItemsWithTitles:@[ @"Unified", @"Side by side" ]];
-    for (NSPopUpButton* p in @[ _pull, _diff ]) {
-        p.target = self;
-        p.action = @selector(changed:);
-    }
-    _git = [NSTextField labelWithString:@"Checking…"];
-    _git.textColor = NSColor.secondaryLabelColor;
-    _git.selectable = YES;
-    NSGridView* grid = [NSGridView gridViewWithViews:@[
-        @[ [NSTextField labelWithString:@"Pull:"], _pull ],
-        @[ [NSTextField labelWithString:@"Diffs:"], _diff ],
-        @[ [NSTextField labelWithString:@"Git:"], _git ],
-    ]];
-    grid.translatesAutoresizingMaskIntoConstraints = NO;
-    grid.rowSpacing = 12;
-    grid.columnSpacing = 8;
-    grid.rowAlignment = NSGridRowAlignmentFirstBaseline;
-    [grid columnAtIndex:0].xPlacement = NSGridCellPlacementTrailing;
-    NSView* v = w.contentView;
-    [v addSubview:grid];
-    [NSLayoutConstraint activateConstraints:@[
-        [grid.topAnchor constraintEqualToAnchor:v.topAnchor constant:24],
-        [grid.bottomAnchor constraintEqualToAnchor:v.bottomAnchor constant:-24],
-        [grid.leadingAnchor constraintEqualToAnchor:v.leadingAnchor constant:40],
-        [grid.trailingAnchor constraintLessThanOrEqualToAnchor:v.trailingAnchor constant:-40],
-    ]];
-    return self;
-}
-
-- (void)showWindow:(id)sender {
-    [_pull selectItemAtIndex:std::clamp(AppSettings().pullMode, 0, 2)];
-    [_diff selectItemAtIndex:AppSettings().diffSplit ? 1 : 0];
-    __weak NSTextField* git = _git;
-    std::thread([git] {
-        const std::wstring version = GitVersion(), path = GitPath(false);
-        RunOnMain([git, version, path] {
-            git.stringValue = version.empty() ? @"Not found: install the Xcode Command Line Tools or Git from Homebrew"
-                                              : [NSString stringWithFormat:@"%@ (%@)", NS(version), NS(path)];
-        });
-    }).detach();
-    if (!self.window.visible) [self.window center];
-    [super showWindow:sender];
-}
-
-- (void)changed:(id)sender {
-    Settings& s = AppSettings();
-    s.pullMode = (int)_pull.indexOfSelectedItem;
-    s.diffSplit = _diff.indexOfSelectedItem == 1;
-    s.Save();
-    [NSNotificationCenter.defaultCenter postNotificationName:DTSettingsChangedNotification object:nil];
-}
-
-@end
-
 // ---------------------------------------------------------------- menus
 
 static NSMenuItem* Item(NSMenu* m, NSString* title, SEL action, NSString* key,
@@ -118,7 +42,6 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
 
 @implementation DTAppDelegate {
     NSMutableArray<DTRepoWindowController*>* _windows;
-    DTSettingsController* _settings;
     NSMenu* _recent;
 }
 
@@ -130,6 +53,7 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
 - (void)applicationWillFinishLaunching:(NSNotification*)note {
     InstallMainDispatcher();
     AppSettings().Load();
+    ApplyAppearance();
     NSApp.mainMenu = [self mainMenu];
 }
 
@@ -168,7 +92,7 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
 // The repositories open when DreamTree quit, as tabs of one window.
 - (void)restoreTabs {
     // A copy: a window that becomes key saves the settings, which rewrites the list.
-    const std::vector<std::wstring> tabs = AppSettings().tabs;
+    const std::vector<std::wstring> tabs = AppSettings().restoreTabs ? AppSettings().tabs : std::vector<std::wstring>();
     const int activeTab = AppSettings().activeTab;
     DTRepoWindowController* opened = _windows.lastObject;  // a folder opened at launch
     NSWindow* anchor = opened.window;
@@ -301,6 +225,13 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
     NSLog(@"snapshot %@: %@; %@", name, ok ? @"saved" : @"FAILED", [rows componentsJoinedByString:@", "]);
 }
 
+- (void)snapshotWindow:(NSWindow*)w name:(NSString*)name {
+    NSString* base = [NS(EnvVar("DREAMTREE_SNAPSHOT")) stringByAppendingPathComponent:name.stringByDeletingPathExtension];
+    const BOOL ok = SaveViewImage(w.contentView.superview ? w.contentView.superview : w.contentView, [base stringByAppendingPathExtension:@"png"]);
+    [[NSData data] writeToFile:[base stringByAppendingPathExtension:@"ready"] atomically:YES];
+    NSLog(@"snapshot %@: %@", name, ok ? @"saved" : @"FAILED");
+}
+
 - (void)snapshotStep:(int)step tries:(int)tries {
     DTRepoWindowController* c = _windows.firstObject;
     RepoSession* s = c.session;
@@ -380,7 +311,33 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
         return;
     case 8:
         AppSettings().diffSplit = !AppSettings().diffSplit;
-        after(0.1, 9, 0);
+        after(0.1, 10, 0);
+        return;
+    case 10: case 12: case 14: case 16: {  // the settings, pane by pane
+        NSArray<NSString*>* panes = @[ @"general", @"appearance", @"git", @"integrations" ];
+        [[DTPreferencesController shared] showPane:panes[(NSUInteger)(step - 10) / 2]];
+        after(1.0, step + 1, 0);
+        return;
+    }
+    case 11: case 13: case 15: case 17: {
+        NSArray<NSString*>* names = @[ @"5-settings-general.png", @"6-settings-appearance.png", @"7-settings-git.png", @"8-settings-integrations.png" ];
+        [self snapshotWindow:[DTPreferencesController shared].window name:names[(NSUInteger)(step - 11) / 2]];
+        after(2.5, step + 1, 0);
+        return;
+    }
+    case 18:  // the sheet that connects an account
+        [[DTPreferencesController shared] openAddAccount];
+        after(1.5, 19, 0);
+        return;
+    case 19: {
+        NSWindow* sheet = [DTPreferencesController shared].sheetWindow;
+        [self snapshotWindow:sheet ? sheet : [DTPreferencesController shared].window name:@"9-add-account.png"];
+        after(2.5, 20, 0);
+        return;
+    }
+    case 20:
+        [[DTPreferencesController shared] closeSheets];
+        after(0.5, 99, 0);
         return;
     default:
         NSLog(@"snapshots: done");
@@ -428,8 +385,7 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
 }
 
 - (IBAction)showSettings:(id)sender {
-    if (!_settings) _settings = [[DTSettingsController alloc] init];
-    [_settings showWindow:nil];
+    [[DTPreferencesController shared] showWindow:nil];
 }
 
 - (IBAction)setPullMode:(NSMenuItem*)sender {

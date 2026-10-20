@@ -190,6 +190,33 @@ std::wstring Plural(size_t n, const wchar_t* one, const wchar_t* many) { return 
 
 // ============================================================================ hashing
 
+std::string Base64(std::string_view s) {
+    static const char k[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve((s.size() + 2) / 3 * 4);
+    size_t i = 0;
+    for (; i + 2 < s.size(); i += 3) {
+        const uint32_t v = (uint32_t)(uint8_t)s[i] << 16 | (uint32_t)(uint8_t)s[i + 1] << 8 | (uint8_t)s[i + 2];
+        out += k[v >> 18];
+        out += k[(v >> 12) & 63];
+        out += k[(v >> 6) & 63];
+        out += k[v & 63];
+    }
+    if (i + 1 == s.size()) {
+        const uint32_t v = (uint32_t)(uint8_t)s[i] << 16;
+        out += k[v >> 18];
+        out += k[(v >> 12) & 63];
+        out += "==";
+    } else if (i + 2 == s.size()) {
+        const uint32_t v = (uint32_t)(uint8_t)s[i] << 16 | (uint32_t)(uint8_t)s[i + 1] << 8;
+        out += k[v >> 18];
+        out += k[(v >> 12) & 63];
+        out += k[(v >> 6) & 63];
+        out += '=';
+    }
+    return out;
+}
+
 uint32_t Fnv1a(std::string_view s) {
     uint32_t h = 2166136261u;
     for (unsigned char c : s) { h ^= c; h *= 16777619u; }

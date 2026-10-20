@@ -5,6 +5,7 @@
 #include "text.h"
 #include "watcher.h"
 
+#include <cctype>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -25,6 +26,8 @@
 #ifdef __APPLE__
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreServices/CoreServices.h>
+#include <Security/Security.h>
+#include <curl/curl.h>
 #include <dispatch/dispatch.h>
 #include <xlocale.h>
 #endif
@@ -346,7 +349,7 @@ std::wstring GitPath(bool) {
 }
 
 int RunProcess(const std::wstring& exe, const std::wstring& args, const std::wstring& cwd, std::string* out, std::string* err,
-               const Sink& sink, const Sink& errSink) {
+               const Sink& sink, const Sink& errSink, const std::vector<std::string>& env) {
     if (!cwd.empty() && !DirExists(cwd)) {
         if (err) *err = "The folder does not exist.";
         return -1;
@@ -357,9 +360,15 @@ int RunProcess(const std::wstring& exe, const std::wstring& args, const std::wst
     std::vector<char*> argv;
     for (std::string& a : argv8) argv.push_back(a.data());
     argv.push_back(nullptr);
-    const std::vector<std::string>& envs = GitEnvironment();
+    // git's environment; `env` adds variables or replaces the ones of the same name
+    auto nameOf = [](const std::string& kv) { return std::string_view(kv).substr(0, kv.find('=')); };
     std::vector<char*> envp;
-    for (const std::string& e : envs) envp.push_back(const_cast<char*>(e.c_str()));
+    for (const std::string& e : GitEnvironment()) {
+        bool replaced = false;
+        for (const std::string& x : env) replaced |= nameOf(x) == nameOf(e);
+        if (!replaced) envp.push_back(const_cast<char*>(e.c_str()));
+    }
+    for (const std::string& x : env) envp.push_back(const_cast<char*>(x.c_str()));
     envp.push_back(nullptr);
 
     int outPipe[2] = { -1, -1 }, errPipe[2] = { -1, -1 };
@@ -450,6 +459,130 @@ int RunProcess(const std::wstring& exe, const std::wstring& args, const std::wst
     if (WIFEXITED(status)) return WEXITSTATUS(status);
     return 128 + (WIFSIGNALED(status) ? WTERMSIG(status) : 0);
 }
+
+// ============================================================================ network and secrets
+
+#ifdef __APPLE__
+
+static size_t CurlBody(char* p, size_t size, size_t n, void* response) {
+    auto* r = static_cast<HttpResponse*>(response);
+    r->body.append(p, size * n);
+    return r->body.size() > (4u << 20) ? 0 : size * n;  // stops answers that are far too big
+}
+
+static size_t CurlHeader(char* p, size_t size, size_t n, void* response) {
+    const std::string_view line(p, size * n);
+    const size_t colon = line.find(':');
+    if (colon != std::string_view::npos) {
+        std::string name(TrimSv(line.substr(0, colon)));
+        for (char& c : name) c = (char)std::tolower((unsigned char)c);
+        static_cast<HttpResponse*>(response)->headers.emplace_back(std::move(name), std::string(TrimSv(line.substr(colon + 1))));
+    }
+    return size * n;
+}
+
+HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& headers) {
+    HttpResponse r;
+    if (url.compare(0, 8, "https://") != 0) {
+        r.error = "only https:// addresses are supported";
+        return r;
+    }
+    static std::once_flag once;
+    std::call_once(once, [] { curl_global_init(CURL_GLOBAL_DEFAULT); });
+    CURL* c = curl_easy_init();
+    if (!c) {
+        r.error = "could not start the request";
+        return r;
+    }
+    curl_slist* list = nullptr;
+    for (const std::string& h : headers) list = curl_slist_append(list, h.c_str());
+    curl_easy_setopt(c, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(c, CURLOPT_HTTPHEADER, list);
+    curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 0L);
+    curl_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(c, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, CurlBody);
+    curl_easy_setopt(c, CURLOPT_WRITEDATA, &r);
+    curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, CurlHeader);
+    curl_easy_setopt(c, CURLOPT_HEADERDATA, &r);
+    const CURLcode rc = curl_easy_perform(c);
+    if (rc == CURLE_OK) {
+        long status = 0;
+        curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &status);
+        r.status = (int)status;
+    } else {
+        r.error = curl_easy_strerror(rc);
+    }
+    curl_slist_free_all(list);
+    curl_easy_cleanup(c);
+    return r;
+}
+
+// The keychain: generic passwords of the service "DreamTree".
+static CFMutableDictionaryRef KeychainQuery(const std::wstring& key) {
+    CFMutableDictionaryRef q = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    const std::string k = Narrow(key);
+    CFStringRef account = CFStringCreateWithBytes(kCFAllocatorDefault, (const UInt8*)k.data(), (CFIndex)k.size(), kCFStringEncodingUTF8, false);
+    CFDictionarySetValue(q, kSecClass, kSecClassGenericPassword);
+    CFDictionarySetValue(q, kSecAttrService, CFSTR("DreamTree"));
+    if (account) {
+        CFDictionarySetValue(q, kSecAttrAccount, account);
+        CFRelease(account);
+    }
+    return q;
+}
+
+bool SecretSave(const std::wstring& key, const std::string& secret, const std::wstring& label) {
+    CFMutableDictionaryRef q = KeychainQuery(key);
+    SecItemDelete(q);
+    const std::string l = Narrow(label);
+    CFStringRef cfLabel = CFStringCreateWithBytes(kCFAllocatorDefault, (const UInt8*)l.data(), (CFIndex)l.size(), kCFStringEncodingUTF8, false);
+    CFDataRef data = CFDataCreate(kCFAllocatorDefault, (const UInt8*)secret.data(), (CFIndex)secret.size());
+    if (cfLabel) CFDictionarySetValue(q, kSecAttrLabel, cfLabel);
+    if (data) CFDictionarySetValue(q, kSecValueData, data);
+    const OSStatus st = data ? SecItemAdd(q, nullptr) : errSecParam;
+    if (cfLabel) CFRelease(cfLabel);
+    if (data) CFRelease(data);
+    CFRelease(q);
+    return st == errSecSuccess;
+}
+
+bool SecretLoad(const std::wstring& key, std::string& secret) {
+    CFMutableDictionaryRef q = KeychainQuery(key);
+    CFDictionarySetValue(q, kSecReturnData, kCFBooleanTrue);
+    CFDictionarySetValue(q, kSecMatchLimit, kSecMatchLimitOne);
+    CFTypeRef found = nullptr;
+    const OSStatus st = SecItemCopyMatching(q, &found);
+    CFRelease(q);
+    if (st != errSecSuccess || !found) return false;
+    CFDataRef data = (CFDataRef)found;
+    secret.assign((const char*)CFDataGetBytePtr(data), (size_t)CFDataGetLength(data));
+    CFRelease(found);
+    return true;
+}
+
+void SecretDelete(const std::wstring& key) {
+    CFMutableDictionaryRef q = KeychainQuery(key);
+    SecItemDelete(q);
+    CFRelease(q);
+}
+
+std::wstring SecretStoreName() { return L"the macOS keychain"; }
+
+#else  // other POSIX systems: no HTTPS client or credential store yet
+
+HttpResponse HttpGet(const std::string&, const std::vector<std::string>&) {
+    HttpResponse r;
+    r.error = "not available on this system";
+    return r;
+}
+bool SecretSave(const std::wstring&, const std::string&, const std::wstring&) { return false; }
+bool SecretLoad(const std::wstring&, std::string&) { return false; }
+void SecretDelete(const std::wstring&) {}
+std::wstring SecretStoreName() { return L"the credential store"; }
+
+#endif
 
 // ============================================================================ file watcher
 

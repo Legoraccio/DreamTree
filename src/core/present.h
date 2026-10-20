@@ -33,3 +33,10 @@ Prompt DropStashPrompt(const StashEntry& s);       // Delete / Cancel
 Prompt DiscardPrompt(const FileChange& f);         // Discard / Cancel
 Prompt RevertPrompt(const RepoData& d, int32_t commit);  // Revert / Cancel
 Prompt DiscardPatchPrompt(const PatchJob& job, const std::wstring& path);  // Discard / Cancel
+Prompt RemoveAccountPrompt(const Account& a);      // Remove / Cancel
+
+// Settings
+const std::vector<std::wstring>& PullModeLabels();  // by Settings::pullMode
+std::wstring PullModeHelp();
+std::wstring AccountsIntro();   // what an account is for, and where its token is kept
+std::wstring TrustedHelp();     // what the trusted folders are
