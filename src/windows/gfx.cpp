@@ -192,6 +192,7 @@ void Gfx::CreateFormats() {
         { F::Avatar, &fontUI, 12.f, DWRITE_FONT_WEIGHT_SEMI_BOLD, 1 },
         { F::Body, &fontUI, 13.f, DWRITE_FONT_WEIGHT_NORMAL, 2 },
         { F::BodyTitle, &fontDisplay, 18.f, DWRITE_FONT_WEIGHT_SEMI_BOLD, 2 },
+        { F::Caption, &fontUI, 12.f, DWRITE_FONT_WEIGHT_NORMAL, 2 },
         { F::Code, &fontMono, 12.5f, DWRITE_FONT_WEIGHT_NORMAL, 3 },
     };
     for (const Def& d : defs) {

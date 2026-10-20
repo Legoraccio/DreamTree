@@ -24,7 +24,7 @@ enum class Hit : uint8_t {
     InlineEdit, DialogBlock, DialogButton, ToastClose,
     WipAction, CommitField, CommitAmend, CommitButton,
     DiffClose, DiffMode, DiffNav, DiffFileStage, DiffHunk, DiffBody, DiffLine, DiffLineAction,
-    NavPage, SideHeader, SideItem, SettingsMenu,
+    NavPage, SideHeader, SideItem, SettingsButton,
     SplitDetail, ColSep,
     HistorySearch, SearchClear, ScopeMenu, ReviewCommit,
     GraphBody, GraphLabel, RefPopup, RefPopupRow,
@@ -113,6 +113,33 @@ struct DialogState {
     std::function<void(int)> onResult;  // button index, -1 when cancelled
 };
 
+// ---- drawing shared by the windows (views.cpp)
+void DrawLogo(Gfx& gfx, float cx, float cy, float s);
+void DrawBranchIcon(Gfx& gfx, float cx, float cy, float s, const Color& c);
+void DrawAvatar(Gfx& gfx, float cx, float cy, float r, const Author& a);
+void DrawSpinner(Gfx& gfx, float cx, float cy, float r, const Color* c = nullptr);
+// A button with a label: 0 standard (subtle fill and border), 1 accent, 2 subtle (fill on hover only).
+void DrawButton(Gfx& gfx, const RectF& r, std::wstring_view label, int style, bool hot, bool enabled, F font = F::UI);
+// A text box frame (WinUI): subtle fill and border, an accent bar at the bottom while it has the focus.
+void TextBoxFrame(Gfx& gfx, const RectF& r, bool focused, bool error = false);
+// A text field's content; masked shows bullets instead of the characters (tokens, passwords).
+void DrawEdit(Gfx& gfx, TextEdit& e, const RectF& area, F font, std::wstring_view placeholder, bool focused, bool masked = false);
+void DrawDialog(Gfx& gfx, const DialogState& dialog, int hotButton, std::vector<RectF>& buttons);
+
+// The frame of a top-level window (dark or light, the DreamTree border) and its menus, by the palette in use.
+void ThemeWindowFrame(HWND h, th::Theme theme);
+
+// ---- the Settings window (settingswindow.cpp): General, Appearance, Git and Integrations (accounts)
+void ShowSettings(int page = -1);  // 0 General, 1 Appearance, 2 Git, 3 Integrations; -1 the page shown last
+void CloseSettings();
+void RefreshSettings(bool theme);  // repaint it after a change made elsewhere (theme: the palette changed)
+HWND SettingsWindowHandle();       // null while it is closed
+void SettingsForSnapshot(int state);
+
+// ---- pictures of the windows for the interface smoke test (snapshots.cpp, DREAMTREE_SNAPSHOT)
+void StartSnapshots();
+bool SnapshotTimer(UINT_PTR id);  // true when the timer was the snapshots'
+
 // How the diff of the session (RepoSession::diff) is shown: scrolling and the text layouts of its lines.
 struct DiffViewUi {
     Scroller vs;
@@ -190,13 +217,14 @@ public:
     void PaintScrollbar(const RectF& area, Scroller& s, int id);
     void PaintDebug();
 
-    void Avatar(float cx, float cy, float r, const Author& a);
-    void BranchIcon(float cx, float cy, float s, const Color& c);
+    void Avatar(float cx, float cy, float r, const Author& a) { DrawAvatar(gfx, cx, cy, r, a); }
+    void BranchIcon(float cx, float cy, float s, const Color& c) { DrawBranchIcon(gfx, cx, cy, s, c); }
     void FileIcon(wchar_t status, float cx, float cy);  // the change as a colored letter: M, A, D, R, U (untracked), C (conflict)
-    void Logo(float cx, float cy, float s);
-    void Spinner(float cx, float cy, float r, const Color* c = nullptr);
-    // A button with a label: 0 standard (subtle fill and border), 1 accent, 2 subtle (fill on hover only).
-    void Button(const RectF& r, std::wstring_view label, int style, bool hot, bool enabled, F font = F::UI);
+    void Logo(float cx, float cy, float s) { DrawLogo(gfx, cx, cy, s); }
+    void Spinner(float cx, float cy, float r, const Color* c = nullptr) { DrawSpinner(gfx, cx, cy, r, c); }
+    void Button(const RectF& r, std::wstring_view label, int style, bool hot, bool enabled, F font = F::UI) {
+        DrawButton(gfx, r, label, style, hot, enabled, font);
+    }
 
     struct Cols {
         float rowX, rowR;     // row highlight
@@ -222,6 +250,7 @@ public:
     bool navCompact = false;                        // icons only: by choice or for lack of room
     float zoom = 1.f;
     UINT dpi = 96;
+    float MainScale() const { return (dpi ? dpi : 96) / 96.f * zoom; }  // this window's g_S
     bool windowActive = true;
 
     // ---- tabs
@@ -284,7 +313,6 @@ public:
     void ShowRefMenu(RepoTab& t, int refIndex, float x, float y);
     void ShowSectionMenu(RepoTab& t, int section, const RectF& r);
     void ShowMoreMenu(const RectF& r);
-    void ShowSettingsMenu(const RectF& r);
     void ShowScopeMenu(const RectF& r);
     void ToolAction(int id);
     void CheckoutFromDetails(RepoTab& t);  // the "Check out" button: a branch at the commit, else the commit itself
@@ -360,7 +388,9 @@ public:
     void PaintDialog();
     void PaintTooltip();
     void PaintInlineInput(RepoTab& t, const RectF& box);
-    void PaintEdit(TextEdit& e, const RectF& area, F font, std::wstring_view placeholder, bool focused);
+    void PaintEdit(TextEdit& e, const RectF& area, F font, std::wstring_view placeholder, bool focused) {
+        DrawEdit(gfx, e, area, font, placeholder, focused);
+    }
     void PaintCommitBox(RepoTab& t, const RectF& r);
     float CommitBoxHeight() const;
     std::wstring tipText;  // tooltip of the hovered control

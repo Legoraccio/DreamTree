@@ -351,6 +351,8 @@ struct StashRaw {
     int64_t at = 0, ct = 0;
 };
 
+}  // namespace
+
 std::wstring Initials(const std::wstring& name, const std::wstring& email) {
     std::vector<std::wstring_view> parts;
     std::wstring_view s = name;
@@ -374,7 +376,7 @@ std::wstring Initials(const std::wstring& name, const std::wstring& email) {
     return ToUpper(r);
 }
 
-uint32_t HslToRgb(float h, float s, float l) {
+static uint32_t HslToRgb(float h, float s, float l) {
     auto f = [&](float n) {
         float k = std::fmod(n + h * 12.f, 12.f);
         float a = s * std::min(l, 1.f - l);
@@ -391,6 +393,8 @@ uint32_t AvatarColor(const std::wstring& key) {
     float lit = 0.38f + (float)((h >> 17) % 10) / 100.f;
     return HslToRgb(hue, sat, lit);
 }
+
+namespace {
 
 std::vector<std::wstring> ReadSubmodules(const std::wstring& root) {
     std::vector<std::wstring> out;

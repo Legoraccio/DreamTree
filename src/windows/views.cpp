@@ -135,8 +135,9 @@ void App::Paint() {
 }
 
 // ============================================================================ icons and controls
+// Free functions drawing with the Gfx of a window: the main window and the settings window share them.
 
-void App::Logo(float cx, float cy, float s) {
+void DrawLogo(Gfx& gfx, float cx, float cy, float s) {
     // Gold commit-graph "tree": a trunk with two branches and three commits.
     const float sw = std::max(1.5f, s * 0.11f);
     const float r = s * 0.13f;
@@ -155,7 +156,7 @@ void App::Logo(float cx, float cy, float s) {
     gfx.Circle(xt, yb - r * 0.4f, r * 1.0f, LogoGold);
 }
 
-void App::BranchIcon(float cx, float cy, float s, const Color& c) {
+void DrawBranchIcon(Gfx& gfx, float cx, float cy, float s, const Color& c) {
     const float sw = std::max(1.f, std::round(s * 0.1f * 2.f) / 2.f);
     const float r = s * 0.13f;
     const float xl = cx - s * 0.2f, xr = cx + s * 0.24f;
@@ -180,12 +181,12 @@ void App::FileIcon(wchar_t st, float cx, float cy) {
              DWRITE_TEXT_ALIGNMENT_CENTER);
 }
 
-void App::Avatar(float cx, float cy, float r, const Author& a) {
+void DrawAvatar(Gfx& gfx, float cx, float cy, float r, const Author& a) {
     gfx.Circle(cx, cy, r, C(a.color));
     gfx.Text(a.initials, { cx - r - 4, cy - r, 2 * r + 8, 2 * r }, F::Avatar, C(0xFFFFFF, 0.95f), DWRITE_TEXT_ALIGNMENT_CENTER);
 }
 
-void App::Spinner(float cx, float cy, float r, const Color* c) {
+void DrawSpinner(Gfx& gfx, float cx, float cy, float r, const Color* c) {
     const float ang = (float)std::fmod(NowMs() * 0.0065, 6.283185307);
     auto p = gfx.Path();
     ComPtr<ID2D1GeometrySink> sk;
@@ -198,7 +199,7 @@ void App::Spinner(float cx, float cy, float r, const Color* c) {
     gfx.dc()->DrawGeometry(p.Get(), gfx.B(c ? *c : Accent), std::max(1.5f, D(2.f)), gfx.RoundCap());
 }
 
-void App::Button(const RectF& r, std::wstring_view label, int style, bool hot, bool enabled, F font) {
+void DrawButton(Gfx& gfx, const RectF& r, std::wstring_view label, int style, bool hot, bool enabled, F font) {
     const float rad = DR(4);
     if (style == 1) {  // accent
         gfx.FillR(r, rad, enabled ? (hot ? AccentHi : Accent) : Subtle);
@@ -217,7 +218,7 @@ void App::Button(const RectF& r, std::wstring_view label, int style, bool hot, b
 
 // A text box frame (WinUI): subtle fill and border, a thin line at the bottom that turns into an accent bar
 // while the box has the focus.
-static void TextBoxFrame(Gfx& gfx, const RectF& r, bool focused, bool error = false) {
+void TextBoxFrame(Gfx& gfx, const RectF& r, bool focused, bool error) {
     gfx.FillR(r, DR(4), focused ? InputSolid : InputBg);
     gfx.StrokeR(r, DR(4), error ? Deleted : ControlStroke);
     if (focused || error) gfx.FillR({ r.x + DR(2), r.b() - DR(2), r.w - DR(4), DR(2) }, DR(1), error ? Deleted : Accent);
@@ -680,7 +681,7 @@ void App::PaintNav(RepoTab& t) {
     PaintScrollbar(list, t.ss, 1);
 
     // Settings, pinned to the bottom of the pane.
-    const bool hov = Hov(Hit::SettingsMenu);
+    const bool hov = Hov(Hit::SettingsButton);
     if (hov) gfx.FillR(settings, DR(4), Hover);
     const float icx = compact ? std::round(settings.cx()) : settings.x + DR(20);
     gfx.Glyph(0xE713, { icx - DR(12), settings.y, DR(24), settings.h }, F::Icon16, Text);
@@ -689,7 +690,7 @@ void App::PaintNav(RepoTab& t) {
         tipText = L"Settings";
         tipAnchor = settings;
     }
-    AddZone(settings, Hit::SettingsMenu);
+    AddZone(settings, Hit::SettingsButton);
 }
 
 // ============================================================================ history
@@ -1107,10 +1108,13 @@ void App::PaintInlineInput(RepoTab&, const RectF& box) {
 
 // Draws a text field's content: placeholder, selection, text and blinking caret. The layout and its
 // origin are stored in the TextEdit for mouse hit testing; the view scrolls to keep the caret visible.
-void App::PaintEdit(TextEdit& e, const RectF& area, F font, std::wstring_view placeholder, bool focused) {
+// A masked field shows a bullet for each character (one per UTF-16 unit, so positions match the text).
+void DrawEdit(Gfx& gfx, TextEdit& e, const RectF& area, F font, std::wstring_view placeholder, bool focused, bool masked) {
     gfx.PushClip(area);
     const bool multi = e.multiline;
-    e.layout = multi ? gfx.Layout(e.text, F::Body, area.w, 100000.f) : gfx.Layout(e.text, font, 100000.f, area.h);
+    const std::wstring bullets = masked ? std::wstring(e.text.size(), L'•') : std::wstring();
+    const std::wstring& shown = masked ? bullets : e.text;
+    e.layout = multi ? gfx.Layout(shown, F::Body, area.w, 100000.f) : gfx.Layout(shown, font, 100000.f, area.h);
     if (!e.layout) { gfx.PopClip(); return; }
     FLOAT cx = 0, cy = 0;
     DWRITE_HIT_TEST_METRICS cm{};
@@ -1298,12 +1302,12 @@ void App::PaintTooltip() {
     gfx.Text(tipText, r, F::Small, Text, DWRITE_TEXT_ALIGNMENT_CENTER);
 }
 
-void App::PaintDialog() {
-    if (!dialog.active) return;
+// A modal dialog over a whole window: a scrim, then a card with the title, the message and a row of buttons
+// (the default one, a destructive one). `buttons` receives where each button is.
+void DrawDialog(Gfx& gfx, const DialogState& dialog, int hot, std::vector<RectF>& buttons) {
+    buttons.clear();
     const float W = (float)gfx.Width(), H = (float)gfx.Height();
-    const RectF full{ 0, 0, W, H };
-    gfx.Fill(full, Scrim);
-    AddZone(full, Hit::DialogBlock);
+    gfx.Fill({ 0, 0, W, H }, Scrim);
     const float w = std::min(DR(480), W - DR(40));
     auto lm = gfx.Layout(dialog.message, F::Body, w - DR(48));
     DWRITE_TEXT_METRICS mm{};
@@ -1339,18 +1343,26 @@ void App::PaintDialog() {
     for (int i = 0; i < n; ++i) {
         const std::wstring& label = dialog.buttons[(size_t)i];
         const RectF b{ card.x + DR(24) + i * (bw + gap), fr.y + DR(24), bw, DR(32) };
-        const bool hov = Hov(Hit::DialogButton, i);
+        const bool hov = i == hot;
         if (i == dialog.danger) {
             gfx.FillR(b, DR(4), hov ? DangerHi : Danger);
             gfx.Text(label, b, F::UISemi, OnColor(Danger), DWRITE_TEXT_ALIGNMENT_CENTER);
         } else if (i == dialog.defButton && !safeDefault) {
-            Button(b, label, 1, hov, true, F::UISemi);
+            DrawButton(gfx, b, label, 1, hov, true, F::UISemi);
         } else {
-            Button(b, label, 0, hov, true, F::UI);
+            DrawButton(gfx, b, label, 0, hov, true, F::UI);
         }
         if (i == dialog.defButton && (safeDefault || i == dialog.danger)) gfx.StrokeR(b.Inset(-DR(2), -DR(2)), DR(6), A(Text, 0.7f), D(1.5f));
-        AddZone(b, Hit::DialogButton, i);
+        buttons.push_back(b);
     }
+}
+
+void App::PaintDialog() {
+    if (!dialog.active) return;
+    AddZone({ 0, 0, (float)gfx.Width(), (float)gfx.Height() }, Hit::DialogBlock);
+    std::vector<RectF> buttons;
+    DrawDialog(gfx, dialog, HovAny(Hit::DialogButton) ? hover.a : -1, buttons);
+    for (size_t i = 0; i < buttons.size(); ++i) AddZone(buttons[i], Hit::DialogButton, (int)i);
 }
 
 // Diagnostics for automated UI tests (DREAMTREE_DEBUG).

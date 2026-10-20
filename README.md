@@ -21,7 +21,7 @@ segue l'aspetto chiaro o scuro e il colore di accento del sistema.
   libreria standard più un piccolo livello per i servizi di Windows e di macOS/POSIX) e due
   interfacce native che lo usano direttamente.
 - **Windows**: Win32 + **Direct2D/DirectWrite** su una swap chain **DirectComposition** con alpha
-  premoltiplicato. Eseguibile singolo da ~950 KB, CRT statica.
+  premoltiplicato. Eseguibile singolo da ~1,1 MB, CRT statica.
 - **Windows 11**: backdrop **Mica Alt** (`DWMWA_SYSTEMBACKDROP_TYPE`), barra del titolo chiara o
   scura secondo il tema, angoli arrotondati, pulsanti caption nativi DWM con **Snap Layouts**, menu
   contestuali nativi nello stesso tema, font *Segoe UI Variable* e *Segoe Fluent Icons*, DPI
@@ -52,8 +52,8 @@ scorrimento.
 - **Pannello di navigazione**: *Changes* (con il numero di file modificati) e *History*; le sezioni
   **Branches**, **Tags**, **Stashes**, **Remotes** e **Submodules** si espandono sul posto, con
   cartelle e ahead/behind; sotto, i **branch recenti** (quello attivo e quelli con i commit più
-  recenti). *Settings* in fondo: tema, pannello dei dettagli, zoom. Con `Ctrl+K`, o quando la
-  finestra è stretta, il pannello mostra solo le icone e ogni sezione si apre come menu.
+  recenti). *Settings* in fondo apre la [finestra delle impostazioni](#impostazioni). Con `Ctrl+K`,
+  o quando la finestra è stretta, il pannello mostra solo le icone e ogni sezione si apre come menu.
 - **History**: titolo con branch, numero di commit e ora dell'ultimo fetch; ricerca dei commit
   (`Ctrl+F`) per messaggio, autore, SHA o nome di branch/tag, con i risultati evidenziati e
   `Invio`/`F3` per passare al successivo; filtro **All branches / Current branch**.
@@ -74,7 +74,7 @@ scorrimento.
 
 ### Temi
 
-Si sceglie da *Settings*, in fondo al pannello di navigazione; la scelta viene salvata.
+Si sceglie in *Settings › Appearance*; la scelta viene salvata.
 
 - **Windows (impostazione di sistema)**, il predefinito: segue *Personalizzazione > Colori* di
   Windows come le app di Windows 11, cioè la modalità delle app (chiara o scura) e il colore
@@ -92,8 +92,8 @@ di macOS sono [più sotto](#macos). Ogni azione gira su un thread separato: il p
 progresso di git in tempo reale, l'esito arriva come notifica e il repository si ricarica.
 
 - **Fetch** di tutti i remoti (i branch eliminati sul remoto vengono rimossi).
-- **Pull**: *fast-forward if possible* (merge), *fast-forward only* o *rebase*, scelti dal menu ⋯;
-  l'ultima scelta diventa quella del pulsante. Le modifiche locali vengono messe da parte e
+- **Pull**: *fast-forward if possible* (merge), *fast-forward only* o *rebase*, scelti dal menu ⋯
+  o in *Settings › General*; l'ultima scelta diventa quella del pulsante. Le modifiche locali vengono messe da parte e
   riapplicate in automatico (`--autostash`).
 - **Push** del branch corrente; se non ha upstream lo crea su `origin`. Se il remoto è avanti
   compare un dialogo: *Pull* oppure *Force push* con `--force-with-lease`, che si ferma se sul
@@ -112,7 +112,9 @@ progresso di git in tempo reale, l'esito arriva come notifica e il repository si
   partenza; quello di un commit o di un revert solo finché non è stato pushato.
 
 I comandi di scrittura passano dal launcher di Git for Windows, quindi hook, SSH e Git Credential
-Manager funzionano come nel terminale; i prompt interattivi sono disattivati.
+Manager funzionano come nel terminale; i prompt interattivi sono disattivati. Con un account
+collegato in *Settings › Integrations*, fetch, pull e push via HTTPS verso il suo server usano il
+suo token (vedi [Account](#account-integrations)).
 
 ### Commit (Uncommitted changes)
 
@@ -192,9 +194,40 @@ e le stesse conferme della versione Windows:
 - **Diff** al posto della cronologia, unificato o affiancato, con stage, unstage e discard di hunk e
   di singole righe (clic, `⇧`-clic o trascinamento, `⌘`-clic).
 - Conferme con i fogli di avviso di sistema (pulsanti distruttivi in rosso), esiti delle operazioni
-  come avvisi in basso nella finestra, impostazioni in *DreamTree › Settings…* (modalità di pull,
-  diff unificato o affiancato, versione di git in uso).
+  come avvisi in basso nella finestra, [impostazioni](#impostazioni) in *DreamTree › Settings…*.
 - Se git manca (un Mac senza Command Line Tools), DreamTree spiega come installarlo.
+
+## Impostazioni
+
+Una finestra a sé, divisa per categorie: su Windows ha il pannello di navigazione e le schede delle
+Impostazioni di Windows 11 (*Settings* in fondo al pannello di navigazione, o `Ctrl+,`); su macOS è
+la finestra standard con una toolbar di pannelli (*DreamTree › Settings…*, `⌘,`).
+
+- **General**: riapertura all'avvio dei repository che erano aperti, modalità di pull, diff
+  unificato o affiancato.
+- **Appearance**: il tema; su Windows anche zoom, pannello dei dettagli e navigazione a sole icone.
+- **Git**: versione e percorso di git in uso; le cartelle autorizzate con *Trust* (repository di un
+  altro account), ognuna rimovibile.
+- **Integrations**: gli account di **GitHub** (anche Enterprise Server), **GitLab** (anche
+  self-managed) e **Gitea / Forgejo** (Codeberg o un server proprio).
+
+### Account (Integrations)
+
+- Un account si collega con un **token di accesso personale**: *Create a token* apre nel browser la
+  pagina del servizio per crearlo, con nome e permessi già compilati (GitHub: `repo`, `workflow`,
+  `read:user`; GitLab: `read_user`, `read_repository`, `write_repository`), poi lo si incolla. Il
+  campo mostra solo pallini e non lascia copiare il token.
+- DreamTree verifica il token chiedendo al server a chi appartiene (l'endpoint `/user` delle API,
+  solo HTTPS, senza seguire redirect) e avvisa quando non basterebbe per il push (un token classico
+  di GitHub senza `repo`).
+- Il token viene salvato nel **Gestore credenziali di Windows** o nel **portachiavi di macOS**, mai
+  nei file di DreamTree: in `settings.ini` restano solo servizio, server e nome utente. Rimuovendo
+  l'account si cancella anche il token, che resta valido sul server finché non lo si revoca lì.
+- **Fetch, Pull e Push** via HTTPS verso il server di un account usano il suo token: git lo riceve
+  per quella sola esecuzione da variabili d'ambiente (`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_n`,
+  `GIT_CONFIG_VALUE_n`: un `http.<server>/.extraHeader`, git 2.31 o successivo), quindi mai sulla
+  riga di comando né nella configurazione di git, e lo invia solo a quel server. I remoti via SSH o
+  su altri server funzionano come prima.
 
 ## Scorciatoie
 
@@ -215,6 +248,7 @@ e le stesse conferme della versione Windows:
 | `Ctrl+B` | nuovo branch sul commit selezionato |
 | `Ctrl+Z` / `Ctrl+Y` | undo / redo dell'ultima azione |
 | `Ctrl+ +/-/0`, `Ctrl+rotella` | zoom |
+| `Ctrl+,` | impostazioni (`Ctrl+Tab` cambia categoria, `Esc` chiude) |
 
 ### macOS
 
@@ -233,6 +267,7 @@ e le stesse conferme della versione Windows:
 | `⌘C` | copia l'ID del commit selezionato |
 | `⌘↩` | commit |
 | `Esc` | annulla la selezione di righe, poi chiude il diff |
+| `⌘,` | impostazioni |
 
 ## Compilare
 
@@ -280,9 +315,14 @@ un certificato Developer ID e notarizzata.
   hunk, ogni riga e centinaia di selezioni casuali (con file senza a capo finale, CRLF, file
   eliminati o nuovi, blocchi ripetuti) e controlla con `git diff` che si sia spostato esattamente
   ciò che era selezionato, alle righe giuste.
+- `tools/uitest` (`mac-snapshots.sh`, `win-snapshots.ps1`): test di fumo dell'interfaccia. Apre un
+  repository usa e getta nell'app, che salva le immagini delle sue finestre (cronologia, diff,
+  pagine delle impostazioni; su Windows anche nei temi scuro e DreamTree) e si chiude; fallisce se
+  l'app si blocca o non le salva. Porta le finestre in primo piano: pensato per le macchine di CI.
 - **GitHub Actions** (`.github/workflows/build.yml`): a ogni push su `main` compila l'app su macOS e
-  su Windows, esegue i due test su entrambe e pubblica gli artifact *DreamTree-macOS* (zip
-  dell'app) e *DreamTree-Windows* (exe). Si può avviare anche a mano (*Run workflow*).
+  su Windows, esegue i test su entrambe e pubblica gli artifact *DreamTree-macOS* (zip dell'app),
+  *DreamTree-Windows* (exe) e le immagini delle finestre (*mac-snapshots*, *windows-snapshots*). Si
+  può avviare anche a mano (*Run workflow*).
 
 ## Struttura
 
@@ -295,11 +335,12 @@ un certificato Developer ID e notarizzata.
 | `src/core/present.cpp` | testi e domande di conferma mostrati da entrambe le interfacce |
 | `src/core/navtree.cpp` | alberi di branch, remoti, tag e file; stato di un ref rispetto al remoto |
 | `src/core/settings.cpp` | impostazioni condivise (`settings.ini`) |
+| `src/core/accounts.cpp` | account di GitHub, GitLab e Gitea / Forgejo: verifica dei token sul server, token nel credential store di sistema, autenticazione di git via HTTPS |
 | `src/core/text.cpp` | testo UTF-8 / wide, percorsi, date, righe di comando |
-| `src/core/platform_win.cpp`, `platform_posix.cpp` | servizi del sistema: processi, file, git, orologio, monitoraggio dei file (`ReadDirectoryChangesW` / FSEvents) |
-| `src/windows/` | **interfaccia Windows**: `app.cpp` (finestra, input, pannello di navigazione, impostazioni), `views.cpp` (disegno delle viste, immediate mode con zone di hit-test), `diffview.cpp`, `actions.cpp` (eventi delle sessioni, dialoghi, campi di testo), `gfx.cpp` (Direct2D/DirectComposition), `theme.cpp` |
-| `src/macos/` | **interfaccia macOS**, Objective-C++: `App.mm` (applicazione, menu, schede ripristinate, impostazioni), `RepoWindow.mm` (finestra, toolbar, eventi delle sessioni, conferme), `Sidebar.mm`, `History.mm`, `Details.mm`, `DiffView.mm`, `Bridge.mm` (testo, colori, simboli) |
-| `tools/` | icone, test del core, test delle patch |
+| `src/core/platform_win.cpp`, `platform_posix.cpp` | servizi del sistema: processi, file, git, orologio, monitoraggio dei file (`ReadDirectoryChangesW` / FSEvents), HTTPS (WinHTTP / libcurl), credenziali (Gestore credenziali / portachiavi) |
+| `src/windows/` | **interfaccia Windows**: `app.cpp` (finestra, input, pannello di navigazione, impostazioni), `views.cpp` (disegno delle viste, immediate mode con zone di hit-test), `diffview.cpp`, `actions.cpp` (eventi delle sessioni, dialoghi, campi di testo), `settingswindow.cpp` (finestra delle impostazioni), `gfx.cpp` (Direct2D/DirectComposition), `theme.cpp`, `snapshots.cpp` (immagini per il test dell'interfaccia) |
+| `src/macos/` | **interfaccia macOS**, Objective-C++: `App.mm` (applicazione, menu, schede ripristinate), `Preferences.mm` (finestra delle impostazioni), `RepoWindow.mm` (finestra, toolbar, eventi delle sessioni, conferme), `Sidebar.mm`, `History.mm`, `Details.mm`, `DiffView.mm`, `Bridge.mm` (testo, colori, simboli) |
+| `tools/` | icone, test del core, delle patch e dell'interfaccia |
 
 Le impostazioni sono salvate in `%APPDATA%\DreamTree\settings.ini` su Windows e in
 `~/Library/Application Support/DreamTree/settings.ini` su macOS; la variabile d'ambiente
@@ -308,7 +349,8 @@ Le impostazioni sono salvate in `%APPDATA%\DreamTree\settings.ini` su Windows e 
 tempi e, con un diff aperto, righe e layout in cache, e lascia che il puntatore sia guidato da
 messaggi inviati alla finestra; `DREAMTREE_ACCENT=RRGGBB` sostituisce il colore principale di
 Windows e `DREAMTREE_CONTRAST=1` simula un tema a contrasto, senza toccare le impostazioni di
-sistema.
+sistema; `DREAMTREE_SNAPSHOT=<cartella>` fa salvare all'app le immagini delle sue finestre in quella
+cartella, poi la chiude (test dell'interfaccia).
 
 ## Licenza
 

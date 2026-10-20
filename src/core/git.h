@@ -210,6 +210,9 @@ std::shared_ptr<CommitDetails> LoadCommitDetails(const std::wstring& root, const
 Graph BuildGraph(const RepoData& d, bool withWip);
 std::wstring GitVersion();               // blocking on first call
 std::wstring GitVersionIfReady();        // empty until GitVersion() completed once
+// Avatars: the initials of a name (or of the e-mail address), and a color of its own for a key.
+std::wstring Initials(const std::wstring& name, const std::wstring& email);
+uint32_t AvatarColor(const std::wstring& key);  // 0xRRGGBB
 // Cheap fingerprint of HEAD, refs, packed-refs and the stash (file timestamps): detects outside changes.
 uint64_t RefsStamp(const std::wstring& gitDir, const std::wstring& commonDir);
 

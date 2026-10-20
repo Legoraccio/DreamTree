@@ -35,7 +35,14 @@ bool ScrollThumb(const RectF& area, const Scroller& s, RectF& thumb) {
 
 static LRESULT CALLBACK WndProcThunk(HWND h, UINT m, WPARAM w, LPARAM l) {
     if (m == WM_NCCREATE && g_app) g_app->hwnd = h;
-    return g_app ? g_app->Proc(h, m, w, l) : DefWindowProcW(h, m, w, l);
+    if (!g_app) return DefWindowProcW(h, m, w, l);
+    // g_S is the scale of the window handling the message: the settings window has its own, and each window
+    // may handle messages of the other while it waits (menus, dialogs).
+    const float saved = g_S;
+    g_S = g_app->MainScale();
+    const LRESULT r = g_app->Proc(h, m, w, l);
+    g_S = saved;
+    return r;
 }
 
 // Native popup menus (rounded Windows 11 menus) follow the theme through uxtheme's app mode: forced dark
@@ -54,24 +61,29 @@ static void SetMenuMode(HWND h, bool dark, bool followSystem) {
     if (flush) flush();
 }
 
-void App::ApplyTheme(bool force) {
-    th::Apply(theme);
+void ThemeWindowFrame(HWND h, th::Theme theme) {
     const bool dark = th::IsDark(), contrast = th::IsHighContrast();
-    const Color& a = th::Accent;
-    wchar_t sig[96];
-    swprintf_s(sig, L"%d %d %d %.3f %.3f %.3f", (int)theme, dark, contrast, a.r, a.g, a.b);
-    if (!force && themeApplied == sig) return;  // a repeated notification
-    themeApplied = sig;
-    if (!hwnd) return;
     const BOOL darkFrame = dark;
-    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkFrame, sizeof darkFrame);
+    DwmSetWindowAttribute(h, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkFrame, sizeof darkFrame);
     // The DreamTree theme has its own navy border; the Windows themes leave it to Windows (accent color
     // when "Show accent color on title bars and window borders" is on).
     const COLORREF border = theme == th::Theme::DreamTree && !contrast ? RGB(0x26, 0x36, 0x5E) : DWMWA_COLOR_DEFAULT;
-    DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, &border, sizeof border);
-    SetMenuMode(hwnd, dark, theme == th::Theme::System || contrast);
+    DwmSetWindowAttribute(h, DWMWA_BORDER_COLOR, &border, sizeof border);
+    SetMenuMode(h, dark, theme == th::Theme::System || contrast);
+}
+
+void App::ApplyTheme(bool force) {
+    th::Apply(theme);
+    const Color& a = th::Accent;
+    wchar_t sig[96];
+    swprintf_s(sig, L"%d %d %d %.3f %.3f %.3f", (int)theme, th::IsDark(), th::IsHighContrast(), a.r, a.g, a.b);
+    if (!force && themeApplied == sig) return;  // a repeated notification
+    themeApplied = sig;
+    if (!hwnd) return;
+    ThemeWindowFrame(hwnd, theme);
     gfx.ClearGradients();
     Invalidate();
+    RefreshSettings(true);
 }
 
 static std::wstring PickFolder(HWND owner) {
@@ -182,6 +194,7 @@ bool App::Create(HINSTANCE inst, int show) {
     ShowWindow(hwnd, maximized ? SW_SHOWMAXIMIZED : show);
     UpdateWindow(hwnd);
     SetTimer(hwnd, 4, 60000, nullptr);  // relative times ("fetched 3 minutes ago") move on
+    StartSnapshots();                   // DREAMTREE_SNAPSHOT: pictures for the interface test
     return true;
 }
 
@@ -347,6 +360,7 @@ LRESULT App::Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
     }
     case WM_TIMER:
+        if (SnapshotTimer(w)) return 0;
         if (w == 1) {  // notifications: drop the expired ones
             const double now = NowMs();
             const size_t before = toasts.size();
@@ -430,7 +444,7 @@ bool App::IsTipZone(Hit id) const {
     case Hit::ToolButton: case Hit::MoreMenu: case Hit::DiffNav: case Hit::DiffClose: case Hit::DiffHunk: case Hit::DiffLineAction:
     case Hit::DetailSha: case Hit::DetailMore: case Hit::DetailMode: case Hit::DetailAction: case Hit::SearchClear:
         return true;
-    case Hit::NavPage: case Hit::SideHeader: case Hit::SettingsMenu:
+    case Hit::NavPage: case Hit::SideHeader: case Hit::SettingsButton:
         return navCompact;  // icons only: the tooltip names them
     default:
         return false;
@@ -884,7 +898,7 @@ void App::OnMouseDown(float x, float y, bool dbl) {
     case Hit::BranchMenu: ShowBranchMenu(z.r); break;
     case Hit::ToolButton: ToolAction(z.a); break;
     case Hit::MoreMenu: ShowMoreMenu(z.r); break;
-    case Hit::SettingsMenu: ShowSettingsMenu(z.r); break;
+    case Hit::SettingsButton: ShowSettings(); break;
     case Hit::ToastClose:
         if (z.a >= 0 && z.a < (int)toasts.size()) toasts.erase(toasts.begin() + z.a);
         break;
@@ -1171,6 +1185,10 @@ bool App::OnKey(UINT vk) {
         else if (vk == VK_RETURN) CloseDialog(dialog.defButton);
         return true;
     }
+    if (ctrl && !alt && vk == VK_OEM_COMMA) {  // Ctrl+, opens the settings, as in most Windows apps
+        ShowSettings();
+        return true;
+    }
     if (inlineInput.active) {
         if (alt && !ctrl) return false;
         if (vk == VK_ESCAPE) CancelBranchInput();
@@ -1339,50 +1357,6 @@ static int Popup(HWND h, HMENU m, float x, float y, UINT align = TPM_LEFTALIGN |
     POINT pt{ (LONG)x, (LONG)y };
     ClientToScreen(h, &pt);
     return TrackPopupMenuEx(m, TPM_RETURNCMD | align | TPM_NONOTIFY | TPM_RIGHTBUTTON, pt.x, pt.y, h, nullptr);
-}
-
-void App::ShowSettingsMenu(const RectF& r) {
-    static constexpr th::Theme kChoices[] = { th::Theme::System, th::Theme::Light, th::Theme::Dark, th::Theme::DreamTree };
-    HMENU m = CreatePopupMenu();
-    if (th::IsHighContrast()) {  // contrast themes win over the choice below
-        AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L"A contrast theme is on: Windows colors are used");
-        AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    }
-    AppendMenuW(m, MF_STRING, 1, L"Windows theme (system setting)");
-    AppendMenuW(m, MF_STRING, 2, L"Windows theme, light");
-    AppendMenuW(m, MF_STRING, 3, L"Windows theme, dark");
-    AppendMenuW(m, MF_STRING, 4, L"DreamTree theme (navy and gold)");
-    for (UINT i = 0; i < 4; ++i)
-        if (kChoices[i] == theme) CheckMenuRadioItem(m, 1, 4, i + 1, MF_BYCOMMAND);
-    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING | (detailVisible ? MF_CHECKED : 0), 10, L"Commit details\tCtrl+J");
-    AppendMenuW(m, MF_STRING | (sideVisible ? 0 : MF_CHECKED), 11, L"Navigation icons only\tCtrl+K");
-    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    const std::wstring zoomLabel = L"Reset zoom (" + std::to_wstring((int)std::lround(zoom * 100)) + L"%)\tCtrl+0";
-    AppendMenuW(m, MF_STRING, 20, L"Zoom in\tCtrl++");
-    AppendMenuW(m, MF_STRING, 21, L"Zoom out\tCtrl+-");
-    AppendMenuW(m, MF_STRING | (std::fabs(zoom - 1.f) < 0.01f ? MF_GRAYED : 0), 22, zoomLabel.c_str());
-    const std::wstring gv = GitVersionIfReady();
-    if (!gv.empty()) {
-        AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(m, MF_STRING | MF_GRAYED, 0, (L"Git " + gv).c_str());
-    }
-    const int cmd = Popup(hwnd, m, r.x, r.y, TPM_LEFTALIGN | TPM_BOTTOMALIGN);
-    DestroyMenu(m);
-    if (cmd >= 1 && cmd <= 4 && kChoices[cmd - 1] != theme) {
-        theme = kChoices[cmd - 1];
-        ApplyTheme();
-        SaveSettings();
-    }
-    switch (cmd) {
-    case 10: detailVisible = !detailVisible; SaveSettings(); break;
-    case 11: sideVisible = !sideVisible; SaveSettings(); break;
-    case 20: SetZoom(zoom + 0.1f); break;
-    case 21: SetZoom(zoom - 0.1f); break;
-    case 22: SetZoom(1.f); break;
-    default: break;
-    }
-    Invalidate();
 }
 
 void App::ShowMoreMenu(const RectF& r) {
@@ -1776,4 +1750,5 @@ void App::SaveSettings() {
     }
     s.activeTab = act;
     s.Save();
+    RefreshSettings(false);
 }

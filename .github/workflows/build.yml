@@ -56,3 +56,11 @@ jobs:
         with:
           name: DreamTree-Windows
           path: bin/DreamTree.exe
+      - name: Interface smoke test (window snapshots)
+        shell: powershell
+        run: ./tools/uitest/win-snapshots.ps1 build/snapshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-snapshots
+          path: build/snapshots

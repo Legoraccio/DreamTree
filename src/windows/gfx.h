@@ -7,7 +7,7 @@ enum class F : int {
     Nav, RowTitle, Title, Huge, Repo, PageTitle,
     Icon10, Icon12, Icon14, Icon16, Icon20, Icon28,
     Avatar,
-    Body, BodyTitle,
+    Body, BodyTitle, Caption,  // wrapping text: 13, 18 and 12 DIP
     Code,  // monospace source text: no trimming, 4-column tab stops
     Count
 };

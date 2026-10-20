@@ -255,19 +255,15 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
 
 // The initials of an account on a color of its own.
 @interface DTInitialsView : NSView
-@property(nonatomic, copy) NSString* name;
+@property(nonatomic) Account account;
 @end
 
 @implementation DTInitialsView
 
 - (void)drawRect:(NSRect)dirty {
-    const std::wstring n = WS(self.name);
-    Author a;
-    a.initials = n.empty() ? L"?" : ToUpper(n.substr(0, 1));
-    const uint32_t h = Fnv1aW(n);
-    NSColor* c = [[NSColor colorWithHue:(h % 360) / 360.0 saturation:0.45 brightness:0.62 alpha:1]
-        colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
-    a.color = (uint32_t)(c.redComponent * 255) << 16 | (uint32_t)(c.greenComponent * 255) << 8 | (uint32_t)(c.blueComponent * 255);
+    Author a;  // the same initials and color as in the Windows app
+    a.initials = Initials(_account.name.empty() ? _account.login : _account.name, L"");
+    a.color = AvatarColor(_account.Key());
     DrawAvatar(NSInsetRect(self.bounds, 1, 1), a);
 }
 
@@ -345,6 +341,7 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
     _token = [[NSSecureTextField alloc] init];
     _token.placeholderString = @"Paste the token here";
     [_token.widthAnchor constraintEqualToConstant:320].active = YES;
+    w.initialFirstResponder = _token;  // the server is already filled in for the common case
     _spinner = [[NSProgressIndicator alloc] init];
     _spinner.style = NSProgressIndicatorStyleSpinning;
     _spinner.controlSize = NSControlSizeSmall;
@@ -528,7 +525,7 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
     }
     if (row < 0 || row >= (NSInteger)_accounts.size()) return cell;
     const Account& a = _accounts[(size_t)row];
-    cell.avatar.name = NS(a.login);
+    cell.avatar.account = a;
     cell.avatar.needsDisplay = YES;
     cell.title.stringValue = a.name.empty() ? NS(a.login) : [NSString stringWithFormat:@"%@ (%@)", NS(a.name), NS(a.login)];
     cell.detail.stringValue = [NSString stringWithFormat:@"%@ · %@", NS(InfoOf(a.forge).name), NS(a.Host())];
