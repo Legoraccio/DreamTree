@@ -65,6 +65,16 @@ std::wstring AccountTitle(const Account& a) {
 
 bool Blank(const std::wstring& s) { return s.find_first_not_of(L" \t\r\n") == std::wstring::npos; }
 
+// A key combination that a line never breaks inside ("Ctrl+Plus"): word joiners around each "+".
+std::wstring Keys(std::wstring_view keys) {
+    std::wstring s;
+    for (wchar_t c : keys) {
+        if (c == L'+') s += L"\u2060+\u2060";
+        else s += c;
+    }
+    return s;
+}
+
 class SettingsWindow {
 public:
     HWND hwnd = nullptr;
@@ -668,7 +678,9 @@ void SettingsWindow::PaintAppearance(float& y) {
 
     // Zoom: [-] 100% [+]   Reset
     const float zoom = g_app ? g_app->zoom : 1.f;
-    c = Card(y, { 0xE71E }, L"Zoom", L"Size of the text and controls in the main window: Ctrl+Plus, Ctrl+Minus, Ctrl+0.", DR(224), DR(32));
+    c = Card(y, { 0xE71E }, L"Zoom",
+             L"Size of the text and controls in the main window: " + Keys(L"Ctrl+Plus") + L", " + Keys(L"Ctrl+Minus") + L", " + Keys(L"Ctrl+0") + L".",
+             DR(224), DR(32));
     const RectF minus{ c.x, c.y, DR(36), DR(32) }, value{ minus.r(), c.y, DR(64), DR(32) }, plus{ value.r(), c.y, DR(36), DR(32) };
     const RectF reset{ c.r() - DR(72), c.y, DR(72), DR(32) };
     const bool canOut = zoom > 0.75f, canIn = zoom < 1.95f, canReset = std::fabs(zoom - 1.f) > 0.01f;
@@ -682,10 +694,11 @@ void SettingsWindow::PaintAppearance(float& y) {
     if (canIn) AddZone(plus, SHit::Zoom, 1);
     if (canReset) AddZone(reset, SHit::Zoom, 2);
 
-    c = Card(y, { 0xE8A0 }, L"Commit details", L"The details of the selected commit, beside the history (Ctrl+J).", DR(100), DR(32));
-    ToggleSwitch(c, g_app && g_app->detailVisible, kDetails);
-    c = Card(y, { 0xE700 }, L"Navigation icons only", L"A narrow navigation pane that leaves more room to the history (Ctrl+K).",
+    c = Card(y, { 0xE8A0 }, L"Commit details", L"The details of the selected commit, beside the history (" + Keys(L"Ctrl+J") + L").",
              DR(100), DR(32));
+    ToggleSwitch(c, g_app && g_app->detailVisible, kDetails);
+    c = Card(y, { 0xE700 }, L"Navigation icons only",
+             L"A narrow navigation pane that leaves more room to the history (" + Keys(L"Ctrl+K") + L").", DR(100), DR(32));
     ToggleSwitch(c, g_app && !g_app->sideVisible, kNavIcons);
 }
 

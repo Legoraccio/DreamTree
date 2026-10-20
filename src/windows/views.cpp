@@ -1108,12 +1108,12 @@ void App::PaintInlineInput(RepoTab&, const RectF& box) {
 
 // Draws a text field's content: placeholder, selection, text and blinking caret. The layout and its
 // origin are stored in the TextEdit for mouse hit testing; the view scrolls to keep the caret visible.
-// A masked field shows a bullet for each character (one per UTF-16 unit, so positions match the text).
+// A masked field shows a dot for each character (one per UTF-16 unit, so positions match the text).
 void DrawEdit(Gfx& gfx, TextEdit& e, const RectF& area, F font, std::wstring_view placeholder, bool focused, bool masked) {
     gfx.PushClip(area);
     const bool multi = e.multiline;
-    const std::wstring bullets = masked ? std::wstring(e.text.size(), L'•') : std::wstring();
-    const std::wstring& shown = masked ? bullets : e.text;
+    const std::wstring dots = masked ? std::wstring(e.text.size(), L'\u25CF') : std::wstring();
+    const std::wstring& shown = masked ? dots : e.text;
     e.layout = multi ? gfx.Layout(shown, F::Body, area.w, 100000.f) : gfx.Layout(shown, font, 100000.f, area.h);
     if (!e.layout) { gfx.PopClip(); return; }
     FLOAT cx = 0, cy = 0;
