@@ -1,398 +1,301 @@
 # Mangrove
 
-Client Git nativo per **Windows 11** e **macOS**. Il codice è condiviso tra le due piattaforme
-(`src/core`: lettura del repository, grafo, operazioni Git con undo/redo, diff e patch parziali,
-impostazioni, testi e domande dell'interfaccia); solo l'interfaccia è nativa di ciascun sistema:
-Win32 + Direct2D con l'aspetto delle app di Windows 11, AppKit su macOS.
+**A lightweight, native Git client for Windows 11 and macOS.**
 
-Apre cartelle Git e mostra la cronologia con il grafo dei commit, i branch locali e remoti, i tag,
-gli stash e le modifiche non ancora committate. Esegue Fetch, Pull, Push, nuovo branch e Stash;
-cliccando un file si apre il suo diff, da cui si possono mettere in stage, togliere dallo stage o
-scartare singoli hunk e singole righe. Su Windows usa i colori di sistema (modalità chiara o scura e
-colore principale) e offre anche il tema originale blu notte e oro (*tema Mangrove*); su macOS
-segue l'aspetto chiaro o scuro e il colore di accento del sistema.
+Mangrove opens Git repositories and shows their history as a commit graph, with local and remote
+branches, tags, stashes and uncommitted changes. It fetches, pulls and pushes, commits, stages whole
+files or single hunks and lines, and undoes what it did. Each platform gets a real native app; the Git
+logic underneath is one shared C++ core.
 
-![temi](https://img.shields.io/badge/temi-Windows%20%2B%20Mangrove-E3B341)
-![licenza](https://img.shields.io/badge/licenza-PolyForm%20Noncommercial%201.0.0-1B2E5E)
+![platforms](https://img.shields.io/badge/platforms-Windows%2011%20%7C%20macOS%2012%2B-1B2E5E)
+![license](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-E3B341)
 
-## Tecnologia
+![Mangrove on Windows, dark theme](docs/images/windows-dark.png)
 
-- **C++20 nativo**, nessun framework UI multipiattaforma: un core condiviso (`src/core`, solo la
-  libreria standard più un piccolo livello per i servizi di Windows e di macOS/POSIX) e due
-  interfacce native che lo usano direttamente.
-- **Windows**: Win32 + **Direct2D/DirectWrite** su una swap chain **DirectComposition** con alpha
-  premoltiplicato. Eseguibile singolo da ~1,1 MB, CRT statica.
-- **Windows 11**: backdrop **Mica Alt** (`DWMWA_SYSTEMBACKDROP_TYPE`), barra del titolo chiara o
-  scura secondo il tema, angoli arrotondati, pulsanti caption nativi DWM con **Snap Layouts**, menu
-  contestuali nativi nello stesso tema, font *Segoe UI Variable* e *Segoe Fluent Icons*, DPI
-  per-monitor v2.
-- **macOS**: **AppKit** in Objective-C++ (ARC): `NSSplitViewController` con barra laterale e
-  inspector, toolbar unificata, schede di finestra native, `NSTableView`/`NSOutlineView` con celle
-  disegnate, simboli SF, fogli di avviso di sistema, **FSEvents** per l'aggiornamento automatico.
-  App universale (Apple silicon e Intel) per macOS 12 o successivo.
-- **Dati**: git (`git.exe` su Windows; su macOS quello di Homebrew o degli Xcode Command Line
-  Tools), l'implementazione più veloce disponibile, con formati separati da NUL,
-  letti in streaming su thread di lavoro: log, ref, stash e status in parallelo. Ordinamento
-  topologico per data (come `git log --date-order`) e layout delle corsie in C++.
+## Light by design
 
-Prestazioni misurate sul repository di Git (85.596 commit, 1.022 ref): cronologia pronta in
-~0,8 s (di cui ~0,7 s di `git log`), layout del grafo 35 ms, ~2 ms per frame durante lo
-scorrimento.
+Lightness is the point of Mangrove: small apps that start at once, stay out of the way and keep up
+with huge repositories.
 
-## Interfaccia Windows
+- **Tiny, self-contained apps.** On Windows Mangrove is a single 1.2 MB executable (static C++
+  runtime, no installer, no dependencies). On macOS it is a 2.6 MB universal app (Apple silicon and
+  Intel), a 1.1 MB download.
+- **Native UI, no web technology.** No Electron, no web view, no cross-platform UI toolkit and no
+  runtime to load: Win32 with Direct2D/DirectWrite on Windows, AppKit on macOS. The apps look,
+  behave and scale like the rest of the system.
+- **git does the git.** Mangrove runs the git that is already installed and reads its NUL-separated
+  output as a stream on worker threads; log, refs, stashes and status load in parallel, and the
+  interface never waits for them.
+- **Only what is visible gets work.** History rows, the lines added and removed by each commit and
+  the lines of a diff are laid out and loaded only when they come into view.
+- **Measured.** On Git's own repository (85,596 commits, 1,022 refs) the history is ready in about
+  0.8 s, 0.7 s of which is `git log`; the graph layout takes 35 ms and a scrolling frame about 2 ms.
+  A 200,000-line diff opens in about 120 ms and scrolls at about 3 ms per frame.
 
-- **Barra del titolo**: una scheda per repository (come Esplora file), ripristinate alla
-  riapertura; pagina iniziale con i repository recenti, apertura da dialogo (`Ctrl+O`),
-  trascinamento di una cartella o riga di comando. Mangrove resta in una sola istanza: avviarlo di
-  nuovo, anche con delle cartelle sulla riga di comando, porta in primo piano la finestra già aperta
-  e apre lì le cartelle. Un file di impostazioni diverso (`MANGROVE_SETTINGS`) ha la sua istanza.
-- **Barra dei comandi**: percorso *repository › branch* (ognuno apre un menu: repository recenti,
-  cambio di branch), poi **Fetch**, **Pull** e **Push** con il numero di commit da ricevere o da
-  inviare, **New branch**, **Stash** e **⋯** (Undo/Redo, Pop dello stash, terminale, modalità di
-  pull, aggiorna, mostra in Esplora file). Durante un'operazione mostra il progresso di git e una
-  barra di avanzamento.
-- **Pannello di navigazione**: *Changes* (con il numero di file modificati) e *History*; le sezioni
-  **Branches**, **Tags**, **Stashes**, **Remotes** e **Submodules** si espandono sul posto, con
-  cartelle e ahead/behind; sotto, i **branch recenti** (quello attivo e quelli con i commit più
-  recenti). *Settings* in fondo apre la [finestra delle impostazioni](#impostazioni). Con `Ctrl+K`,
-  o quando la finestra è stretta, il pannello mostra solo le icone e ogni sezione si apre come menu.
-- **History**: titolo con branch, numero di commit e ora dell'ultimo fetch; ricerca dei commit
-  (`Ctrl+F`) per messaggio, autore, SHA o nome di branch/tag, con i risultati evidenziati e
-  `Invio`/`F3` per passare al successivo; filtro **All branches / Current branch**.
-- **Righe a due livelli** (titolo; autore · tempo relativo · SHA) e la colonna **Changes** con le
-  righe aggiunte e rimosse da ogni commit, caricate in background solo per le righe visibili.
-- **Grafo** a linee sottili con curve morbide: punti pieni per i commit, anelli per i merge, un
-  anello tratteggiato per le modifiche non committate, un quadrato per gli stash.
-- **Colonna Branch / tag**: per ogni commit una chip con icone locale (portatile), remoto (nuvola)
-  o tag, e `+N` quando sullo stesso commit ci sono altri ref; passando sopra la chip compare
-  l'elenco di tutti, con lo stato di ciascuno (*checked out*, *here and on origin*, *local only*,
-  *1 to push, 2 to pull*, *on origin only*, *tag*). Doppio clic su una voce per il checkout, clic
-  destro per il suo menu. Le colonne si ridimensionano trascinando i bordi delle intestazioni.
-- **Dettagli**: SHA con copia, menu del commit, titolo e descrizione, autore con data e parent
-  cliccabili, azioni **Check out** (il branch su quel commit, altrimenti il commit in detached HEAD),
-  **New branch here**, **Revert**; per uno stash **Pop**, **Apply**, **Delete**. Sotto, i file
-  modificati con stato e righe +/−, in lista o ad albero.
-- Aggiornamento automatico quando i file del repository cambiano.
+## Screenshots
 
-### Temi
+| Windows | macOS |
+| --- | --- |
+| ![History and details on Windows](docs/images/windows-dark.png) | ![History and details on macOS](docs/images/macos-dark.png) |
+| ![Settings on Windows: Integrations](docs/images/windows-settings-dark.png) | ![Settings on macOS: signing in with GitHub](docs/images/macos-sign-in-dark.png) |
 
-Si sceglie in *Settings › Appearance*; la scelta viene salvata.
+## Features
 
-- **Windows (impostazione di sistema)**, il predefinito: segue *Personalizzazione > Colori* di
-  Windows come le app di Windows 11, cioè la modalità delle app (chiara o scura) e il colore
-  principale con le sue sfumature (lette con le API di Windows, `UISettings`). Se le impostazioni
-  cambiano mentre Mangrove è aperto, i colori si aggiornano subito.
-- **Windows chiaro** / **Windows scuro**: gli stessi colori con la modalità fissata.
-- **Mangrove**: il tema originale, blu notte su Mica con l'oro come colore principale.
-- Con un **tema a contrasto** di Windows attivo vengono usati i colori di sistema, opachi, qualunque
-  sia la scelta.
+**History.** A thin commit graph with smooth curves (dots for commits, rings for merges, a dashed
+ring for uncommitted changes, squares for stashes) and two-line rows: summary, then author, relative
+time and short SHA, plus the lines each commit added and removed. Branch and tag chips show
+whether a branch is local, on a remote or both, and how far ahead or behind it is. Search by
+message, author, SHA or ref name; show all branches or only the current one.
 
-### Azioni Git
+**Branches, tags, stashes, remotes, submodules.** Browsable in the sidebar, with folders and
+ahead/behind counts; double-click to check out (a remote branch creates its tracking branch), or use
+the context menus.
 
-Uguali sulle due piattaforme (la logica è nel core); i tasti indicati sono quelli di Windows, quelli
-di macOS sono [più sotto](#macos). Ogni azione gira su un thread separato: il pulsante mostra uno spinner, la barra dei comandi il
-progresso di git in tempo reale, l'esito arriva come notifica e il repository si ricarica.
+**Commit.** The uncommitted changes are the first row of the history. Stage and unstage files or
+folders, discard changes (always confirmed), write a summary with a 72-character counter and a
+description, amend the previous commit; during a merge git's prepared message is filled in.
 
-- **Fetch** di tutti i remoti (i branch eliminati sul remoto vengono rimossi).
-- **Pull**: *fast-forward if possible* (merge), *fast-forward only* o *rebase*, scelti dal menu ⋯
-  o in *Settings › General*; l'ultima scelta diventa quella del pulsante. Le modifiche locali vengono messe da parte e
-  riapplicate in automatico (`--autostash`).
-- **Push** del branch corrente; se non ha upstream lo crea su `origin`. Se il remoto è avanti
-  compare un dialogo: *Pull* oppure *Force push* con `--force-with-lease`, che si ferma se sul
-  remoto ci sono commit non ancora scaricati.
-- **New branch** (`Ctrl+B`): campo inline nella colonna Branch / tag del commit selezionato, con
-  validazione del nome; il nuovo branch viene creato lì e attivato.
-- **Stash** (incluse le modifiche non tracciate) e **Pop**; dal pannello di navigazione o dai
-  dettagli anche *Apply* e *Delete* (con conferma).
-- **Checkout**: doppio clic su un branch (pannello, chip o elenco della chip) o *Check out* nei
-  dettagli; un branch remoto crea il branch locale che lo traccia. Il menu del branch nella barra
-  dei comandi cambia branch.
-- **Revert** (con conferma): crea un commit che annulla quello selezionato; per un merge annulla le
-  modifiche portate dal branch unito (`-m 1`). Non disponibile con modifiche in stage.
-- **Undo / Redo** (`Ctrl+Z` / `Ctrl+Y`) per checkout, creazione di branch, stash, commit e revert
-  fatti in Mangrove. L'undo di un nuovo branch lo elimina solo se punta ancora al commit di
-  partenza; quello di un commit o di un revert solo finché non è stato pushato.
+**Diff.** Click a file to see its diff, unified or side by side, with changed words highlighted and
+renames shown as `old → new`. On uncommitted changes, stage, unstage or discard a single hunk, or
+just the lines you select. Mangrove builds the partial patches itself and hands them to `git apply`
+with recomputed line numbers, so a change lands where it belongs even when the same text repeats in
+the file. Binary files, new and empty files, merge conflicts (combined diff) and "no newline at end
+of file" are handled; minified lines are cut around the change.
 
-I comandi di scrittura passano dal launcher di Git for Windows, quindi hook, SSH e Git Credential
-Manager funzionano come nel terminale; i prompt interattivi sono disattivati. Con un account
-collegato in *Settings › Integrations*, fetch, pull e push via HTTPS verso il suo server usano il
-suo token (vedi [Account](#account-integrations)).
+**Git actions.** Fetch (all remotes, pruning deleted branches), pull (merge if possible,
+fast-forward only, or rebase, with local changes set aside and put back), push (creating the upstream
+when there is none; when the remote is ahead, pull or force push with `--force-with-lease`), new
+branch, stash and pop, check out, revert. Each runs on its own thread with git's progress on screen.
+**Undo and redo** cover checkouts, new branches, stashes, commits and reverts made in Mangrove,
+as long as nothing was pushed.
 
-### Commit (Uncommitted changes)
+**Accounts.** Connect GitHub (including Enterprise Server), GitLab (including self-managed) and
+Gitea / Forgejo (Codeberg or your own server), then fetch, pull and push without being asked for a
+password or an SSH key. See [Accounts](#accounts).
 
-- La prima riga della cronologia riassume le modifiche non committate; **Review and commit** (o
-  *Changes* nel pannello) le seleziona e porta il cursore sul messaggio di commit.
-- **Stage / Unstage** di un file o di una cartella (vista ad albero) con i pulsanti che compaiono al
-  passaggio sulla riga, oppure *Stage all* / *Unstage all* nelle intestazioni. Le liste si
-  aggiornano subito, git conferma in background; i nomi con caratteri speciali (`[`, `*`, `?`)
-  sono trattati letteralmente.
-- **Discard** (cestino sulla riga o menu contestuale), sempre con conferma; un file non tracciato
-  viene eliminato dal disco.
-- **Box di commit** fisso in basso: *Summary* con il contatore dei 72 caratteri, *Description* su
-  più righe (Invio nel summary passa alla descrizione), selezione con mouse e tastiera,
-  copia/incolla, `Ctrl+Invio` per confermare.
-- **Amend previous commit**: precompila il messaggio dell'ultimo commit; durante un merge il
-  messaggio preparato da git (`MERGE_MSG`) viene proposto in automatico.
-- **Undo / Redo** anche per commit e amend (`reset --soft`, le modifiche restano in stage), solo
-  finché il commit non è stato pushato.
-- Repository di un altro account Windows (*dubious ownership*): pulsante "Trust and open" che
-  autorizza il percorso solo dentro Mangrove, senza modificare la configurazione Git globale.
+**Settings.** A window of its own, by category: General, Appearance, Git, Integrations.
 
-### Diff dei file
+**And more.** Tabs, one per repository, reopened at launch. The view refreshes by itself when the
+repository changes on disk. Repositories owned by another user account can be trusted for Mangrove
+only, without touching git's global configuration. If git is missing, Mangrove says how to install
+it.
 
-- Clic su un file (di un commit, *unstaged* o *staged*) per aprirne il diff al posto della
-  cronologia; `Esc` o *Close* per tornare indietro. Il file aperto resta evidenziato nella lista.
-- Vista **Unified** o **Split** (affiancata, la scelta viene ricordata); i file solo aggiunti o
-  solo eliminati restano su una colonna. Numeri di riga vecchi/nuovi, righe aggiunte in verde e
-  rimosse in rosso, parole cambiate evidenziate, rinomine mostrate come `vecchio → nuovo`.
-- Frecce ▲▼ per saltare all'hunk precedente/successivo; scorrimento orizzontale con `Shift+rotella`,
-  rotella orizzontale o `← →`.
-- Sulle modifiche non committate: **Stage file / Unstage file** nell'intestazione; su ogni hunk
-  **Stage hunk / Unstage hunk** e, per le modifiche non in stage, il cestino **Discard hunk** (con
-  conferma). Quando un file passa da una lista all'altra il diff lo segue, e si aggiorna da solo se
-  il file cambia su disco.
-- **Singole righe**: clic su una riga modificata per selezionarla, trascinamento o `Shift+clic` per
-  un intervallo, `Ctrl+clic` per aggiungerne o toglierne una. La barra che compare in basso offre
-  *Stage lines* / *Unstage lines* e *Discard* (con conferma); `Esc` annulla la selezione, che resta
-  valida anche se il diff si ricarica. Le righe non selezionate restano come sono: una riga rimossa
-  rimane nel file, una aggiunta resta fuori dallo stage.
-- Le patch parziali sono costruite da Mangrove e applicate con `git apply` (`--cached` per lo
-  stage, `--reverse` per togliere dallo stage o scartare). Le righe di partenza degli hunk vengono
-  ricalcolate, così una modifica finisce nel punto giusto anche quando lo stesso testo si ripete nel
-  file. Non disponibili per file non tracciati (si mettono in stage interi), conflitti e rinomine.
-- Casi particolari: file binari, file nuovi/vuoti, file non tracciati (mostrati come aggiunti),
-  conflitti di merge (diff combinato), "nessun a capo a fine file". Le righe lunghissime
-  (codice minificato) mostrano 10.000 caratteri attorno alla modifica.
-- Prestazioni: solo le righe visibili vengono impaginate e ogni riga resta in cache mentre il diff
-  è aperto. Un diff da 200.000 righe (100.000 righe riscritte) si carica in ~120 ms e scorre a
-  ~3 ms per frame.
+### On Windows
 
-## Interfaccia macOS
+- Laid out like the Windows 11 apps: tabs in the title bar, a command bar with a
+  *repository › branch* breadcrumb, a navigation pane on **Mica**, Snap Layouts, native context
+  menus, *Segoe UI Variable* and *Segoe Fluent Icons*, per-monitor DPI, zoom (`Ctrl`+`+`/`-`/`0`).
+- **Themes:** the Windows theme (light or dark, following the system setting, with your accent
+  color), light or dark on purpose, or **Mangrove**, the original navy and gold. Contrast themes
+  always win.
+- The Settings window follows the Windows 11 Settings app (`Ctrl+,`).
+- **One instance:** starting Mangrove again, even with folders on the command line, brings the open
+  window to the front and opens the folders there. Another settings file (`MANGROVE_SETTINGS`) is
+  another instance.
+- Write commands go through Git for Windows' launcher, so hooks, SSH and Git Credential Manager work
+  as they do in a terminal.
 
-L'app per macOS usa i controlli di sistema, con gli stessi dati, le stesse azioni, gli stessi testi
-e le stesse conferme della versione Windows:
+### On macOS
 
-- **Finestre e schede native**: un repository per scheda (`⌘T`, il `+` della barra delle schede,
-  *Window › Merge All Windows*), riaperte all'avvio; pagina iniziale con i repository recenti e
-  trascinamento di una cartella; *File › Open Recent*; una cartella trascinata sull'icona nel Dock
-  si apre in Mangrove.
-- **Toolbar** unificata: barra laterale, **Fetch**, **Pull** e **Push** (da macOS 26 con il numero
-  di commit da ricevere o da inviare), **New Branch**, **Stash**, **Pop**, un indicatore di
-  attività, la ricerca dei commit e il menu ⋯ (Undo/Redo, terminale, modalità di pull, aggiorna,
-  Finder). Il sottotitolo della finestra mostra branch, numero di commit e ultimo fetch, e durante
-  un'operazione il progresso di git.
-- **Barra laterale** (source list): *Changes* con il numero di file, *History*, poi
-  Branches, Remotes, Tags, Stashes e Submodules, con cartelle e ahead/behind; doppio clic per il
-  checkout, menu contestuali.
-- **Cronologia** in una tabella con colonne ridimensionabili: chip di branch e tag con le icone
-  locale / remoto / tag e `+N` (l'elenco completo con lo stato di ciascuno nel tooltip), grafo,
-  righe a due livelli, righe +/− caricate per le righe visibili; filtro *All Branches / Current
-  Branch* e risultati della ricerca.
-- **Dettagli** nell'inspector a destra (si può nascondere): commit con autore, parent cliccabili,
-  *Check Out*, *New Branch…*, *Revert…* (per uno stash *Pop*, *Apply*, *Delete…*) e i file
-  modificati, in lista o ad albero; per le modifiche non committate le liste *Unstaged* e *Staged*
-  con Stage / Unstage (cestino per scartare al passaggio del mouse) e il messaggio di commit con
-  *Amend previous commit*.
-- **Diff** al posto della cronologia, unificato o affiancato, con stage, unstage e discard di hunk e
-  di singole righe (clic, `⇧`-clic o trascinamento, `⌘`-clic).
-- Conferme con i fogli di avviso di sistema (pulsanti distruttivi in rosso), esiti delle operazioni
-  come avvisi in basso nella finestra, [impostazioni](#impostazioni) in *Mangrove › Settings…*.
-- Se git manca (un Mac senza Command Line Tools), Mangrove spiega come installarlo.
+- AppKit throughout: native window tabs, a source-list sidebar, an inspector for the details, a
+  unified toolbar, SF Symbols, system alert sheets, FSEvents for refreshing.
+- Follows the light or dark appearance and the accent color of the system, or a fixed light or dark
+  appearance.
+- The standard Settings window with a toolbar of panes (`⌘,`).
+- A universal app for macOS 12 or later; drop a folder on the Dock icon to open it.
 
-## Impostazioni
+## Accounts
 
-Una finestra a sé, divisa per categorie: su Windows ha il pannello di navigazione e le schede delle
-Impostazioni di Windows 11 (*Settings* in fondo al pannello di navigazione, o `Ctrl+,`); su macOS è
-la finestra standard con una toolbar di pannelli (*Mangrove › Settings…*, `⌘,`).
+- **Sign in with the browser** (github.com): Mangrove asks GitHub for a one-time code and shows it;
+  *Copy the code and open GitHub* copies it and opens the page where you paste it and authorize
+  Mangrove (scopes `repo`, `workflow`, `read:user`). Mangrove meanwhile asks GitHub every few
+  seconds whether you did (the OAuth 2.0 device flow, RFC 8628, with no client secret), then gets the
+  token. Organizations that restrict OAuth apps have to approve Mangrove for their repositories, or
+  you can use a token.
+- **Or paste a personal access token.** *Create a token* opens the service's page for a new token
+  with its name and scopes filled in. The token box shows dots and won't let the token be copied.
+- **Checked before it is kept.** Mangrove asks the server whom the token belongs to (the API's
+  `/user`, HTTPS only, no redirects followed) and warns when it couldn't push (a classic GitHub token
+  without `repo`).
+- **Kept by the system.** Tokens live in **Windows Credential Manager** or the **macOS keychain**,
+  never in Mangrove's files: `settings.ini` only lists the service, the server and the user name.
+  Removing an account deletes its token there (it stays valid on the server until you revoke it).
+- **Used only for its server.** For fetch, pull and push, git gets the token for that one command
+  through environment variables (`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_n`, `GIT_CONFIG_VALUE_n`: an
+  `http.<server>/.extraHeader`, git 2.31 or later): never on a command line, never in git's
+  configuration, and sent to that server only. Remotes with an SSH address on the same server
+  (`git@github.com:…`, `ssh://git@github.com/…`) are read as HTTPS ones for those commands
+  (`url.<server>/.insteadOf`), so they need no SSH key. Other remotes work as before; when a server
+  refuses an SSH key, the message suggests connecting the account.
+- GitLab stays with tokens: its OAuth tokens expire after two hours.
 
-- **General**: riapertura all'avvio dei repository che erano aperti, modalità di pull, diff
-  unificato o affiancato.
-- **Appearance**: il tema; su Windows anche zoom, pannello dei dettagli e navigazione a sole icone.
-- **Git**: versione e percorso di git in uso; le cartelle autorizzate con *Trust* (repository di un
-  altro account), ognuna rimovibile.
-- **Integrations**: gli account di **GitHub** (anche Enterprise Server), **GitLab** (anche
-  self-managed) e **Gitea / Forgejo** (Codeberg o un server proprio).
+### Mangrove's GitHub OAuth app
 
-### Account (Integrations)
-
-- Su **github.com** basta **accedere dal browser**: *Sign in with the browser* chiede a GitHub un
-  codice monouso e lo mostra; *Copy the code and open GitHub* lo copia e apre la pagina di GitHub
-  dove incollarlo e autorizzare Mangrove (permessi `repo`, `workflow`, `read:user`). Intanto
-  Mangrove chiede a GitHub ogni pochi secondi se l'autorizzazione è arrivata (OAuth 2.0 *device
-  flow*, RFC 8628, senza client secret), riceve il token e lo tratta come uno incollato. *Cancel*,
-  o chiudere la finestra, rinuncia; il codice scade dopo 15 minuti. Le organizzazioni che limitano le
-  app OAuth devono approvare Mangrove per i loro repository (oppure si usa un token). GitLab resta
-  con i token: i suoi token OAuth scadono dopo due ore.
-- Altrimenti un account si collega con un **token di accesso personale**: *Create a token* apre nel
-  browser la pagina del servizio per crearlo, con nome e permessi già compilati (GitHub: `repo`,
-  `workflow`, `read:user`; GitLab: `read_user`, `read_repository`, `write_repository`), poi lo si
-  incolla. Il campo mostra solo pallini e non lascia copiare il token.
-- Mangrove verifica il token chiedendo al server a chi appartiene (l'endpoint `/user` delle API,
-  solo HTTPS, senza seguire redirect) e avvisa quando non basterebbe per il push (un token classico
-  di GitHub senza `repo`).
-- Il token viene salvato nel **Gestore credenziali di Windows** o nel **portachiavi di macOS**, mai
-  nei file di Mangrove: in `settings.ini` restano solo servizio, server e nome utente. Rimuovendo
-  l'account si cancella anche il token, che resta valido sul server finché non lo si revoca lì.
-- **Fetch, Pull e Push** via HTTPS verso il server di un account usano il suo token: git lo riceve
-  per quella sola esecuzione da variabili d'ambiente (`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_n`,
-  `GIT_CONFIG_VALUE_n`: un `http.<server>/.extraHeader`, git 2.31 o successivo), quindi mai sulla
-  riga di comando né nella configurazione di git, e lo invia solo a quel server. Anche i remoti con
-  un indirizzo SSH dello stesso server (`git@github.com:…`, `ssh://git@github.com/…`) passano dal
-  token: in quelle esecuzioni git li legge come indirizzi HTTPS (`url.<server>/.insteadOf`), così
-  non serve una chiave SSH. Gli altri remoti (altri server, alias SSH di `~/.ssh/config`) funzionano
-  come prima; se un server rifiuta la chiave SSH, il messaggio suggerisce di collegare l'account.
-
-#### L'app OAuth di GitHub
-
-L'accesso dal browser passa per l'app OAuth *Mangrove* registrata su GitHub. Il suo Client ID sta in
-`kGitHubClientId` (`src/core/accounts.cpp`): non è un segreto, come quelli di GitHub CLI e Git
-Credential Manager, e il client secret non serve. Senza Client ID il pulsante non compare. Chi
-pubblica una propria versione registra la sua app:
+Signing in with the browser goes through the OAuth app *Mangrove* registered on GitHub. Its client ID
+is `kGitHubClientId` in `src/core/accounts.cpp`; like the ones of GitHub CLI and Git Credential
+Manager it isn't a secret, and no client secret is needed. Without a client ID the button doesn't
+appear. To publish your own build with your own app:
 
 1. *Settings › Developer settings › OAuth Apps › New OAuth App*
    (<https://github.com/settings/applications/new>).
-2. *Homepage URL* e *Authorization callback URL*: l'indirizzo del repository (il device flow non
-   usa il callback, ma il campo è obbligatorio).
-3. Spuntare **Enable Device Flow**; togliere la spunta a **Expire user access tokens** (Mangrove non
-   rinnova i token, che altrimenti scadrebbero dopo 8 ore) e lasciare spento *Allow wildcard
-   matching*.
-4. Mettere il *Client ID* in `kGitHubClientId`. Per provare un'altra app senza ricompilare, la
-   variabile d'ambiente `MANGROVE_GITHUB_CLIENT_ID` sostituisce quello compilato.
+2. *Homepage URL* and *Authorization callback URL*: the repository's address (the device flow
+   doesn't use the callback, but the field is required).
+3. Tick **Enable Device Flow**; untick **Expire user access tokens** (Mangrove doesn't renew tokens,
+   which would otherwise expire after 8 hours) and leave *Allow wildcard matching* off.
+4. Put the client ID in `kGitHubClientId`. To try another app without rebuilding, the
+   `MANGROVE_GITHUB_CLIENT_ID` environment variable overrides the built-in one.
 
-## Scorciatoie
+## Download
 
-### Windows
+Every push to `main` builds both apps on GitHub Actions: open the latest run of the
+[Build workflow](https://github.com/Legoraccio/Mangrove/actions/workflows/build.yml) and download
+**Mangrove-Windows** (the executable, zipped) or **Mangrove-macOS.zip** (the app; double-click to
+unzip). You need git: [Git for Windows](https://git-scm.com/download/win) on Windows; on macOS the
+Xcode Command Line Tools (`xcode-select --install`) or Homebrew's git.
 
-| Tasto | Azione |
-| --- | --- |
-| `Ctrl+O` / `Ctrl+T` / `Ctrl+W` | apri repository / nuova scheda / chiudi scheda |
-| `Ctrl+Tab` | scheda successiva |
-| `↑ ↓ PagSu PagGiù Home Fine` | naviga tra i commit (con un diff aperto: lo scorre) |
-| `Ctrl+F` | cerca nella cronologia; `Invio` / `Shift+Invio` risultato successivo / precedente, `Esc` svuota |
-| `F3` / `Shift+F3` | risultato successivo / precedente della ricerca |
-| `Esc` | annulla la selezione di righe, poi chiude il diff |
-| `F5` / `Ctrl+R` | ricarica |
-| `Ctrl+K` | pannello di navigazione completo / solo icone |
-| `Ctrl+J` | mostra/nascondi i dettagli |
-| `Ctrl+C` | copia lo SHA del commit selezionato |
-| `Ctrl+B` | nuovo branch sul commit selezionato |
-| `Ctrl+Z` / `Ctrl+Y` | undo / redo dell'ultima azione |
-| `Ctrl+ +/-/0`, `Ctrl+rotella` | zoom |
-| `Ctrl+,` | impostazioni (`Ctrl+Tab` cambia categoria, `Esc` chiude) |
+The builds aren't signed yet, so the systems ask before the first start:
 
-### macOS
+- **Windows:** SmartScreen may warn about an unknown app; Smart App Control, when it is on, blocks
+  unsigned apps that Microsoft's cloud doesn't know yet.
+- **macOS:** the app is signed *ad hoc* and not notarized, so macOS blocks it the first time. Allow it
+  once in *System Settings › Privacy & Security › Open Anyway*, or run
+  `xattr -dr com.apple.quarantine Mangrove.app`.
 
-| Tasto | Azione |
-| --- | --- |
-| `⌘O` / `⌘T` / `⌘W` | apri repository / nuova scheda / chiudi |
-| `⌘F`, `⌘G` / `⇧⌘G` | cerca nella cronologia, risultato successivo / precedente (anche `↩` / `⇧↩` nel campo) |
-| `⌘1` / `⌘2` | cronologia / modifiche non committate |
-| `⇧⌘F` / `⇧⌘P` / `⌘P` | fetch / pull / push |
-| `⇧⌘N` | nuovo branch sul commit selezionato |
-| `⌥⌘S` / `⌥⇧⌘S` | stash / pop |
-| `⌥⌘Z` / `⌥⇧⌘Z` | undo / redo dell'ultima azione git (`⌘Z` resta l'annulla del testo) |
-| `⌘R` | ricarica |
-| `⌃⌘S` / `⌥⌘I` | barra laterale / dettagli |
-| `⌥⌘B` | solo il branch corrente |
-| `⌘C` | copia l'ID del commit selezionato |
-| `⌘↩` | commit |
-| `Esc` | annulla la selezione di righe, poi chiude il diff |
-| `⌘,` | impostazioni |
-
-## Compilare
+## Building
 
 ### Windows
 
-Requisiti: Visual Studio 2022/2026 con il carico di lavoro *Sviluppo di applicazioni desktop
-con C++* e Git for Windows. Il Windows SDK viene scaricato automaticamente dai pacchetti NuGet
-ufficiali Microsoft nella cartella `deps` (nessun privilegio di amministratore).
+Requirements: Visual Studio 2022 or 2026 with the *Desktop development with C++* workload, and Git
+for Windows. The Windows SDK is downloaded on the first build from Microsoft's official NuGet
+packages into `deps` (no administrator rights needed).
 
 ```powershell
 .\build.ps1          # release -> bin\Mangrove.exe
-.\build.ps1 -Run     # compila e avvia
-.\build.ps1 -Dbg     # build di debug
+.\build.ps1 -Run     # build, then start it
+.\build.ps1 -Dbg     # debug build -> bin\Mangrove-debug.exe
 ```
 
 ### macOS
 
-Requisiti: macOS 12 o successivo e Xcode, oppure solo gli Xcode Command Line Tools
-(`xcode-select --install`). Nessun progetto Xcode: lo script compila con `clang++` dalla riga di
-comando.
+Requirements: macOS 12 or later with Xcode, or just the Xcode Command Line Tools
+(`xcode-select --install`). There is no Xcode project: the script builds with `clang++` from the
+command line.
 
 ```bash
-./build-mac.sh            # release universale (Apple silicon + Intel) -> bin/Mangrove.app
-./build-mac.sh --run      # compila e apre l'app
-./build-mac.sh --native   # solo per il processore di questo Mac (più veloce)
-./build-mac.sh --debug    # build di debug -> bin/Mangrove-debug.app
+./build-mac.sh            # universal release (Apple silicon + Intel) -> bin/Mangrove.app
+./build-mac.sh --run      # build, then open it
+./build-mac.sh --native   # only for this Mac's processor (faster)
+./build-mac.sh --debug    # debug build -> bin/Mangrove-debug.app
 ```
 
-L'app è firmata *ad hoc* e non è notarizzata: compilata su un altro Mac (per esempio scaricata dalla
-CI), macOS la blocca al primo avvio. Si sblocca una volta da *Impostazioni di Sistema › Privacy e
-sicurezza › Apri comunque*, oppure dal Terminale con `xattr -dr com.apple.quarantine Mangrove.app`.
-Per distribuirla ad altri va firmata con un certificato Developer ID e notarizzata.
+A build runs on the Mac that made it. To give it to others, sign it with a Developer ID certificate
+and notarize it.
 
-### Icone
+### Icons
 
-`tools\make-icon.ps1` rigenera `src\windows\mangrove.ico` e `src\macos\AppIcon.png` (da cui
-`build-mac.sh` produce l'`.icns`).
+`tools\make-icon.ps1` regenerates `src\windows\mangrove.ico` and `src\macos\AppIcon.png` (from which
+`build-mac.sh` makes the `.icns`).
 
-### Test
+## Tests
 
-- `tools/coretest` (`run.ps1` su Windows, `run.sh` su macOS): test del core condiviso, uguali sulle
-  due piattaforme: testo UTF-8/UTF-16/UTF-32, percorsi e righe di comando, alberi del pannello di
-  navigazione, testi dell'interfaccia, file delle impostazioni e un repository vero creato nella
-  cartella temporanea e letto con git (cronologia, ref, grafo, status, dettagli, diff, righe +/−).
-- `tools/patchtest` (`run.ps1` / `run.sh`): test di regressione delle patch parziali. Crea un
-  repository usa e getta nella cartella temporanea, mette in stage, toglie dallo stage e scarta ogni
-  hunk, ogni riga e centinaia di selezioni casuali (con file senza a capo finale, CRLF, file
-  eliminati o nuovi, blocchi ripetuti) e controlla con `git diff` che si sia spostato esattamente
-  ciò che era selezionato, alle righe giuste.
-- `tools/uitest` (`mac-snapshots.sh`, `win-snapshots.ps1`): test di fumo dell'interfaccia. Apre un
-  repository usa e getta nell'app, che salva le immagini delle sue finestre (cronologia, diff,
-  pagine delle impostazioni; su Windows anche nei temi scuro e Mangrove) e si chiude; fallisce se
-  l'app si blocca o non le salva. Porta le finestre in primo piano: pensato per le macchine di CI.
-- **GitHub Actions** (`.github/workflows/build.yml`): a ogni push su `main` compila l'app su macOS e
-  su Windows, esegue i test su entrambe e pubblica gli artifact *Mangrove-macOS.zip* (l'app, si apre con un doppio clic),
-  *Mangrove-Windows* (exe) e le immagini delle finestre (*mac-snapshots*, *windows-snapshots*). Si
-  può avviare anche a mano (*Run workflow*).
+- **`tools/coretest`** (`run.ps1` on Windows, `run.sh` on macOS): the shared core, the same on both
+  platforms: UTF-8/16/32 text, paths and command lines, the sidebar trees, interface texts, the
+  settings file, accounts (token checks, git's authorization environment, the credential store) and a
+  real repository created in the temporary folder and read with git (history, refs, graph, status,
+  details, diffs, line counts).
+- **`tools/patchtest`** (`run.ps1` / `run.sh`): partial patches. It stages, unstages and discards every
+  hunk, every line and hundreds of random selections in a throwaway repository (files without a final
+  newline, CRLF, deleted and new files, repeated blocks), and checks with `git diff` that exactly the
+  selection moved, at the right lines.
+- **`tools/uitest`**: interface smoke tests. `mac-snapshots.sh` and `win-snapshots.ps1` open a
+  throwaway repository in the app, which saves pictures of its windows (history, diff, every settings
+  page; on Windows in three themes) and quits; `win-single-instance.ps1` checks that a second start
+  hands its folder to the first one. They bring windows to the front: they are meant for CI machines.
+- **GitHub Actions** (`.github/workflows/build.yml`) builds both apps on every push to `main`, runs all
+  the tests, and publishes the apps and the pictures (*mac-snapshots*, *windows-snapshots*). The
+  screenshots above come from there.
 
-## Struttura
+## Project layout
 
-| Cartella / file | Contenuto |
+| Folder / file | What it holds |
 | --- | --- |
-| `src/core/` | **codice condiviso**, C++20 portabile |
-| `src/core/git.cpp` | esecuzione di git, parser in streaming, ordinamento, dettagli, righe +/−, status, diff e patch parziali |
-| `src/core/graph.cpp` | assegnazione delle corsie del grafo |
-| `src/core/session.cpp` | `RepoSession`: un repository aperto. Caricamento e aggiornamento automatico, selezione e dettagli, ricerca, righe +/−, operazioni git in coda con undo/redo, diff con la selezione di righe; i risultati tornano al thread dell'interfaccia come eventi |
-| `src/core/present.cpp` | testi e domande di conferma mostrati da entrambe le interfacce |
-| `src/core/navtree.cpp` | alberi di branch, remoti, tag e file; stato di un ref rispetto al remoto |
-| `src/core/settings.cpp` | impostazioni condivise (`settings.ini`) |
-| `src/core/accounts.cpp` | account di GitHub, GitLab e Gitea / Forgejo: verifica dei token sul server, token nel credential store di sistema, autenticazione di git via HTTPS |
-| `src/core/text.cpp` | testo UTF-8 / wide, percorsi, date, righe di comando |
-| `src/core/platform_win.cpp`, `platform_posix.cpp` | servizi del sistema: processi, file, git, orologio, monitoraggio dei file (`ReadDirectoryChangesW` / FSEvents), HTTPS (WinHTTP / libcurl), credenziali (Gestore credenziali / portachiavi) |
-| `src/windows/` | **interfaccia Windows**: `app.cpp` (finestra, input, pannello di navigazione, impostazioni), `views.cpp` (disegno delle viste, immediate mode con zone di hit-test), `diffview.cpp`, `actions.cpp` (eventi delle sessioni, dialoghi, campi di testo), `settingswindow.cpp` (finestra delle impostazioni), `gfx.cpp` (Direct2D/DirectComposition), `theme.cpp`, `snapshots.cpp` (immagini per il test dell'interfaccia) |
-| `src/macos/` | **interfaccia macOS**, Objective-C++: `App.mm` (applicazione, menu, schede ripristinate), `Preferences.mm` (finestra delle impostazioni), `RepoWindow.mm` (finestra, toolbar, eventi delle sessioni, conferme), `Sidebar.mm`, `History.mm`, `Details.mm`, `DiffView.mm`, `Bridge.mm` (testo, colori, simboli) |
-| `tools/` | icone, test del core, delle patch e dell'interfaccia |
+| `src/core/` | **the shared core**, portable C++20 |
+| `src/core/git.cpp` | running git, streaming parsers, ordering, details, line counts, status, diffs and partial patches |
+| `src/core/graph.cpp` | the lanes of the commit graph |
+| `src/core/session.cpp` | `RepoSession`, an open repository: loading and refreshing, selection, details, search, queued git operations with undo and redo, diffs with line selection; results reach the interface thread as events |
+| `src/core/accounts.cpp` | GitHub, GitLab and Gitea / Forgejo accounts: the browser sign-in, token checks, git's authorization |
+| `src/core/present.cpp` | the texts and confirmation prompts both interfaces show |
+| `src/core/navtree.cpp` | trees of branches, remotes, tags and files; a ref's state against its remote |
+| `src/core/settings.cpp` | the shared settings file |
+| `src/core/text.cpp` | UTF-8 and wide text, paths, dates, command lines |
+| `src/core/platform_win.cpp`, `platform_posix.cpp` | system services: processes, files, git, clocks, file watching (`ReadDirectoryChangesW` / FSEvents), HTTPS (WinHTTP / libcurl), credentials (Credential Manager / keychain) |
+| `src/windows/` | **the Windows app**: `app.cpp` (window, input, sidebar), `views.cpp` (painting, immediate mode with hit-test zones), `diffview.cpp`, `actions.cpp` (session events, dialogs, text fields), `settingswindow.cpp`, `instance.cpp` (one instance), `gfx.cpp` (Direct2D / DirectComposition), `theme.cpp`, `snapshots.cpp` (pictures for the tests) |
+| `src/macos/` | **the macOS app**, Objective-C++: `App.mm` (application, menus, restored tabs), `RepoWindow.mm` (window, toolbar, session events, prompts), `Sidebar.mm`, `History.mm`, `Details.mm`, `DiffView.mm`, `Preferences.mm` (Settings), `Bridge.mm` (text, colors, symbols) |
+| `tools/` | icons and tests |
 
-Le impostazioni sono salvate in `%APPDATA%\Mangrove\settings.ini` su Windows e in
-`~/Library/Application Support/Mangrove/settings.ini` su macOS; la variabile d'ambiente
-`MANGROVE_SETTINGS` può indicare un file diverso (profili separati, test). Mangrove prima si chiamava
-DreamTree: al primo avvio riprende le impostazioni salvate da DreamTree (schede, repository recenti,
-tema). Per i test UI,
-`MANGROVE_DEBUG=1` mostra in basso a sinistra zona sotto il puntatore, focus, numero di notifiche,
-tempi e, con un diff aperto, righe e layout in cache, e lascia che il puntatore sia guidato da
-messaggi inviati alla finestra; `MANGROVE_ACCENT=RRGGBB` sostituisce il colore principale di
-Windows e `MANGROVE_CONTRAST=1` simula un tema a contrasto, senza toccare le impostazioni di
-sistema; `MANGROVE_SNAPSHOT=<cartella>` fa salvare all'app le immagini delle sue finestre in quella
-cartella, poi la chiude (test dell'interfaccia); `MANGROVE_GITHUB_CLIENT_ID` usa un'altra app OAuth
-di GitHub per l'accesso dal browser.
+## Configuration
 
-## Licenza
+Settings live in `%APPDATA%\Mangrove\settings.ini` on Windows and in
+`~/Library/Application Support/Mangrove/settings.ini` on macOS. Mangrove used to be called
+DreamTree: the first start reads DreamTree's settings (tabs, recent repositories, theme).
 
-Mangrove è distribuito con la [PolyForm Noncommercial License 1.0.0](LICENSE.md): si può usare,
-studiare, modificare e condividere liberamente per scopi **non commerciali** (uso personale, studio,
-ricerca, hobby, enti non profit, scuole e università, enti pubblici), conservando l'avviso di
-copyright. L'uso commerciale non è permesso: per una licenza commerciale scrivi all'autore,
+Environment variables, mostly for tests:
+
+| Variable | Effect |
+| --- | --- |
+| `MANGROVE_SETTINGS=<file>` | another settings file (separate profiles, tests); on Windows, also another instance |
+| `MANGROVE_DEBUG=1` | Windows: a diagnostics strip (zone under the pointer, focus, timings, cached diff layouts); the pointer can be driven by posted messages |
+| `MANGROVE_ACCENT=RRGGBB` | Windows: this accent color instead of the system's |
+| `MANGROVE_CONTRAST=1` | Windows: behave as if a contrast theme were on |
+| `MANGROVE_SNAPSHOT=<folder>` | save pictures of the windows in that folder, then quit (interface tests) |
+| `MANGROVE_GITHUB_CLIENT_ID=<id>` | another GitHub OAuth app for signing in with the browser |
+
+## Keyboard shortcuts
+
+### Windows
+
+| Keys | Action |
+| --- | --- |
+| `Ctrl+O` / `Ctrl+T` / `Ctrl+W` | open a repository / new tab / close the tab |
+| `Ctrl+Tab` | next tab |
+| `↑ ↓ PgUp PgDn Home End` | move through the commits (with a diff open: scroll it) |
+| `Ctrl+F` | search the history; `Enter` / `Shift+Enter` next / previous result, `Esc` clears |
+| `F3` / `Shift+F3` | next / previous search result |
+| `Esc` | clear the line selection, then close the diff |
+| `F5` / `Ctrl+R` | reload |
+| `Ctrl+K` | full sidebar / icons only |
+| `Ctrl+J` | show or hide the details |
+| `Ctrl+C` | copy the selected commit's SHA |
+| `Ctrl+B` | new branch at the selected commit |
+| `Ctrl+Z` / `Ctrl+Y` | undo / redo the last action |
+| `Ctrl` + `+` `-` `0`, `Ctrl` + wheel | zoom |
+| `Ctrl+,` | settings (`Ctrl+Tab` switches the page, `Esc` closes) |
+
+### macOS
+
+| Keys | Action |
+| --- | --- |
+| `⌘O` / `⌘T` / `⌘W` | open a repository / new tab / close |
+| `⌘F`, `⌘G` / `⇧⌘G` | search the history, next / previous result (`↩` / `⇧↩` in the field too) |
+| `⌘1` / `⌘2` | history / uncommitted changes |
+| `⇧⌘F` / `⇧⌘P` / `⌘P` | fetch / pull / push |
+| `⇧⌘N` | new branch at the selected commit |
+| `⌥⌘S` / `⌥⇧⌘S` | stash / pop |
+| `⌥⌘Z` / `⌥⇧⌘Z` | undo / redo the last git action (`⌘Z` stays text undo) |
+| `⌘R` | reload |
+| `⌃⌘S` / `⌥⌘I` | sidebar / details |
+| `⌥⌘B` | current branch only |
+| `⌘C` | copy the selected commit's ID |
+| `⌘↩` | commit |
+| `Esc` | clear the line selection, then close the diff |
+| `⌘,` | settings |
+
+## License
+
+Mangrove is released under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): you may use, study,
+change and share it freely for **noncommercial** purposes (personal use, study, research, hobby
+projects, charities, schools and universities, public institutions), keeping the copyright notice.
+Commercial use isn't allowed; for a commercial license, contact the author,
 [@Legoraccio](https://github.com/Legoraccio).
 
 Copyright (c) 2026 Roberto Di Miceli.

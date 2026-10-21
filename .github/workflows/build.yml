@@ -4,7 +4,7 @@ name: Build
 on:
   push:
     branches: [main]
-    paths-ignore: ["**.md", "screenshot*.png"]
+    paths-ignore: ["**.md", "screenshot*.png", "docs/**"]
   pull_request:
   workflow_dispatch:
 
