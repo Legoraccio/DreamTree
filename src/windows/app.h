@@ -136,6 +136,13 @@ void RefreshSettings(bool theme);  // repaint it after a change made elsewhere (
 HWND SettingsWindowHandle();       // null while it is closed
 void SettingsForSnapshot(int state);
 
+// ---- one instance per settings file (instance.cpp)
+std::vector<std::wstring> CommandLineFolders();  // the folders on the command line, as full paths
+bool HandOffToRunningInstance();                 // true: the instance with these settings took the folders, quit
+void MarkInstanceWindow(HWND h);                 // the main window, for a second start to find
+void EndInstance(HWND h);
+bool FoldersFromAnotherInstance(LPARAM copyData, std::vector<std::wstring>& folders);  // WM_COPYDATA from a second start
+
 // ---- pictures of the windows for the interface smoke test (snapshots.cpp, MANGROVE_SNAPSHOT)
 void StartSnapshots();
 bool SnapshotTimer(UINT_PTR id);  // true when the timer was the snapshots'

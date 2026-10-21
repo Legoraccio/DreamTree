@@ -66,3 +66,6 @@ jobs:
         with:
           name: windows-snapshots
           path: build/snapshots
+      - name: Single instance
+        shell: powershell
+        run: ./tools/uitest/win-single-instance.ps1

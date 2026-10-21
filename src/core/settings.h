@@ -36,3 +36,4 @@ private:
 };
 
 Settings& AppSettings();
+std::wstring SettingsFile();  // where they are read from and saved: MANGROVE_SETTINGS, or settings.ini in AppDataDir()

@@ -43,7 +43,9 @@ scorrimento.
 
 - **Barra del titolo**: una scheda per repository (come Esplora file), ripristinate alla
   riapertura; pagina iniziale con i repository recenti, apertura da dialogo (`Ctrl+O`),
-  trascinamento di una cartella o riga di comando.
+  trascinamento di una cartella o riga di comando. Mangrove resta in una sola istanza: avviarlo di
+  nuovo, anche con delle cartelle sulla riga di comando, porta in primo piano la finestra già aperta
+  e apre lì le cartelle. Un file di impostazioni diverso (`MANGROVE_SETTINGS`) ha la sua istanza.
 - **Barra dei comandi**: percorso *repository › branch* (ognuno apre un menu: repository recenti,
   cambio di branch), poi **Fetch**, **Pull** e **Push** con il numero di commit da ricevere o da
   inviare, **New branch**, **Stash** e **⋯** (Undo/Redo, Pop dello stash, terminale, modalità di

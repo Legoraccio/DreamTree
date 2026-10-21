@@ -130,6 +130,7 @@ bool App::Create(HINSTANCE inst, int show) {
     hwnd = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP | WS_EX_ACCEPTFILES, wc.lpszClassName, L"Mangrove", WS_OVERLAPPEDWINDOW,
                            x, y, ww, wh, nullptr, nullptr, inst, nullptr);
     if (!hwnd) return false;
+    MarkInstanceWindow(hwnd);
     dpi = GetDpiForWindow(hwnd);
 
     // Windows 11 look: Mica Alt backdrop (tabbed title bar), rounded corners; light or dark frame by theme.
@@ -155,23 +156,14 @@ bool App::Create(HINSTANCE inst, int show) {
     if (AppSettings().restoreTabs)
         for (auto& p : AppSettings().tabs) tabs.push_back(MakeTab(p));
     active = std::clamp(AppSettings().activeTab, 0, std::max(0, (int)tabs.size() - 1));
-    int argc = 0;
-    if (LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc)) {
-        for (int i = 1; i < argc; ++i) {
-            std::wstring p = argv[i];
-            if (DirExists(p)) {
-                wchar_t full[MAX_PATH * 4];
-                if (GetFullPathNameW(p.c_str(), (DWORD)std::size(full), full, nullptr)) p = full;
-                bool found = false;
-                for (size_t k = 0; k < tabs.size(); ++k)
-                    if (ToLower(tabs[k]->path) == ToLower(NormalizePath(p))) { active = (int)k; found = true; }
-                if (!found) {
-                    tabs.push_back(MakeTab(NormalizePath(p)));
-                    active = (int)tabs.size() - 1;
-                }
-            }
+    for (const std::wstring& p : CommandLineFolders()) {
+        bool found = false;
+        for (size_t k = 0; k < tabs.size(); ++k)
+            if (ToLower(tabs[k]->path) == ToLower(p)) { active = (int)k; found = true; }
+        if (!found) {
+            tabs.push_back(MakeTab(p));
+            active = (int)tabs.size() - 1;
         }
-        LocalFree(argv);
     }
     if (tabs.empty()) {
         tabs.push_back(MakeTab(L""));
@@ -353,6 +345,14 @@ LRESULT App::Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         DragFinish(drop);
         return 0;
     }
+    case WM_COPYDATA: {  // Mangrove started again: its folders open here, and this window comes to the front
+        std::vector<std::wstring> folders;
+        if (!FoldersFromAnotherInstance(l, folders)) break;
+        for (const std::wstring& f : folders) OpenPath(f);
+        if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+        SetForegroundWindow(h);
+        return TRUE;
+    }
     case WM_APP_RUN: {
         auto* fn = reinterpret_cast<std::function<void()>*>(l);
         (*fn)();
@@ -388,6 +388,7 @@ LRESULT App::Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         DestroyWindow(h);
         return 0;
     case WM_DESTROY:
+        EndInstance(h);
         PostQuitMessage(0);
         return 0;
     }

@@ -10,7 +10,7 @@ Settings& AppSettings() {
     return s;
 }
 
-static std::wstring SettingsPath() {
+std::wstring SettingsFile() {
     const std::wstring custom = EnvVar("MANGROVE_SETTINGS");  // separate profiles, UI tests
     if (!custom.empty()) return custom;
     return PathJoin(AppDataDir(), L"settings.ini");
@@ -26,7 +26,7 @@ static bool ReadOldSettings(std::string& raw) {
 
 void Settings::Load() {
     std::string raw;
-    if (!ReadWholeFile(SettingsPath(), raw, 1u << 22) && !ReadOldSettings(raw)) return;
+    if (!ReadWholeFile(SettingsFile(), raw, 1u << 22) && !ReadOldSettings(raw)) return;
     if (raw.compare(0, 3, "\xEF\xBB\xBF") == 0) raw.erase(0, 3);  // saved by an editor that writes a UTF-8 BOM
     const std::wstring text = Widen(raw);
     recent.clear();
@@ -72,7 +72,7 @@ bool Settings::Save() const {
     for (const auto& a : accounts) kv(L"account", a);
     for (const auto& r : recent) kv(L"recent", r);
     for (const auto& t : trusted) kv(L"trusted", t);
-    return WriteFileAtomic(SettingsPath(), Narrow(s));
+    return WriteFileAtomic(SettingsFile(), Narrow(s));
 }
 
 std::wstring Settings::Get(std::wstring_view key, std::wstring_view def) const {
