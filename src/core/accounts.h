@@ -76,7 +76,12 @@ DevicePoll ParseDevicePoll(int status, const std::string& body);
 TokenCheck BrowserSignIn(Forge f, const std::wstring& server, const std::function<void(const DeviceCode&)>& onCode,
                          const std::atomic<bool>& cancel, std::string* token);
 
-// git's environment for HTTPS fetch, pull and push: each account's token as the authorization of requests to
-// its server (GIT_CONFIG_* variables: never on a command line or in a file). Empty without accounts. Reads
-// the credential store the first time: call it on a worker thread.
+// git's configuration for one account: its token as the authorization of HTTPS requests to its server, and the
+// server's SSH addresses (git@host:path, ssh://git@host/path) read as HTTPS ones, so that remotes written either
+// way use the account (no SSH key needed). Name and value pairs.
+std::vector<std::pair<std::string, std::string>> GitAuthConfig(const Account& a, const std::string& token);
+
+// git's environment for fetch, pull and push: GitAuthConfig of each account, as GIT_CONFIG_* variables (never on
+// a command line or in a file). Empty without accounts. Reads the credential store the first time: call it on a
+// worker thread.
 std::vector<std::string> GitAuthEnvironment(const std::vector<Account>& accounts);

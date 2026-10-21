@@ -526,16 +526,27 @@ TokenCheck BrowserSignIn(Forge f, const std::wstring& serverInput, const std::fu
     }
 }
 
+std::vector<std::pair<std::string, std::string>> GitAuthConfig(const Account& a, const std::string& token) {
+    const std::string server = Narrow(a.server), host = Narrow(a.Host().substr(0, a.Host().find(L'/')));  // "github.com"
+    return {
+        // Basic authorization with the user name and the token, as git would send it after asking for a password.
+        { "http." + server + "/.extraHeader", "Authorization: Basic " + Base64(Narrow(a.login) + ":" + std::string(TrimSv(token))) },
+        { "url." + server + "/.insteadOf", "git@" + host + ":" },
+        { "url." + server + "/.insteadOf", "ssh://git@" + host + "/" },
+    };
+}
+
 std::vector<std::string> GitAuthEnvironment(const std::vector<Account>& accounts) {
     std::vector<std::string> env;
     int n = 0;
     for (const Account& a : accounts) {
         std::string token;
         if (!TokenOf(a, token)) continue;
-        // Basic authorization with the user name and the token, as git would send it after asking for a password.
-        env.push_back("GIT_CONFIG_KEY_" + std::to_string(n) + "=http." + Narrow(a.server) + "/.extraHeader");
-        env.push_back("GIT_CONFIG_VALUE_" + std::to_string(n) + "=Authorization: Basic " + Base64(Narrow(a.login) + ":" + token));
-        ++n;
+        for (const auto& [key, value] : GitAuthConfig(a, token)) {
+            env.push_back("GIT_CONFIG_KEY_" + std::to_string(n) + "=" + key);
+            env.push_back("GIT_CONFIG_VALUE_" + std::to_string(n) + "=" + value);
+            ++n;
+        }
     }
     if (n) env.insert(env.begin(), "GIT_CONFIG_COUNT=" + std::to_string(n));
     return env;

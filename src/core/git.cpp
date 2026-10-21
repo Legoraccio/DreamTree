@@ -84,6 +84,19 @@ static bool MissingTools(const std::string& err) { return err.find("xcrun: error
 
 std::wstring GitErrorText(const GitOpResult& r) {
     if (MissingTools(r.err)) return kInstallTools;
+    // A remote with an SSH address and no key the server accepts ("git@github.com: Permission denied (publickey)."):
+    // the accounts are the other way in.
+    if (const size_t at = r.err.find(": Permission denied (publickey"); at != std::string::npos) {
+        const size_t nl = r.err.rfind('\n', at), from = nl == std::string::npos ? 0 : nl + 1;
+        std::string who(TrimSv(std::string_view(r.err).substr(from, at - from)));  // "git@github.com"
+        if (const size_t a = who.find('@'); a != std::string::npos) who.erase(0, a + 1);
+        const std::wstring host = who.empty() || who.find(' ') != std::string::npos ? std::wstring(L"The server") : Widen(who);
+        return host + L" refused the SSH connection: no SSH key of yours is set up there. Connect the account in Settings \u203A "
+                      L"Integrations, and Mangrove uses it for this server's remotes, or add an SSH key to your account on the server.";
+    }
+    if (r.err.find("Host key verification failed") != std::string::npos)
+        return L"The SSH connection stopped: the server's host key isn't known on this computer yet. Connect the account in "
+               L"Settings \u203A Integrations, and Mangrove uses it instead, or connect once with ssh in a terminal to accept the key.";
     const std::string& src = r.err.empty() ? r.out : r.err;
     std::string text;
     int lines = 0;

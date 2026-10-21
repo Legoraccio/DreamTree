@@ -188,6 +188,33 @@ static void TestAccounts(const std::filesystem::path& dir) {
     const GitOpResult off = RunGitOp(root, L"", L"config --get-urlmatch http.extraheader https://other.example.org/repo.git", nullptr, env);
     CHECK(!off.ok() && TrimSv(off.out).empty());
 
+    // An account's configuration: SSH addresses of its server become HTTPS ones, so they get the token too.
+    const Account gh{ Forge::GitHub, L"https://github.com", L"octocat", L"" };
+    std::vector<std::string> ghEnv;
+    const auto config = GitAuthConfig(gh, "ghp_x");
+    for (size_t i = 0; i < config.size(); ++i) {
+        ghEnv.push_back("GIT_CONFIG_KEY_" + std::to_string(i) + "=" + config[i].first);
+        ghEnv.push_back("GIT_CONFIG_VALUE_" + std::to_string(i) + "=" + config[i].second);
+    }
+    ghEnv.insert(ghEnv.begin(), "GIT_CONFIG_COUNT=" + std::to_string(config.size()));
+    CHECK(RunGitOp(root, L"", L"init -q").ok());
+    CHECK(RunGitOp(root, L"", L"remote add scp git@github.com:octo/hello.git").ok());
+    CHECK(RunGitOp(root, L"", L"remote add ssh ssh://git@github.com/octo/hello.git").ok());
+    CHECK(RunGitOp(root, L"", L"remote add other git@gitlab.com:octo/hello.git").ok());
+    auto url = [&](const wchar_t* remote) { return std::string(TrimSv(RunGitOp(root, L"", std::wstring(L"remote get-url ") + remote, nullptr, ghEnv).out)); };
+    CHECK(url(L"scp") == "https://github.com/octo/hello.git");
+    CHECK(url(L"ssh") == "https://github.com/octo/hello.git");
+    CHECK(url(L"other") == "git@gitlab.com:octo/hello.git");
+    const GitOpResult header = RunGitOp(root, L"", L"config --get-urlmatch http.extraheader https://github.com/octo/hello.git", nullptr, ghEnv);
+    CHECK(std::string(TrimSv(header.out)) == "Authorization: Basic " + Base64("octocat:ghp_x"));
+
+    // SSH without a key: what to do instead of git's words.
+    GitOpResult denied;
+    denied.code = 128;
+    denied.err = "git@github.com: Permission denied (publickey).\r\nfatal: Could not read from remote repository.\n";
+    const std::wstring deniedText = GitErrorText(denied);
+    CHECK(deniedText.rfind(L"github.com refused the SSH connection", 0) == 0 && deniedText.find(L"Integrations") != std::wstring::npos);
+
 #ifdef _WIN32  // the credential store (the keychain needs a logged-in user, which CI on macOS may not have)
     const Account a{ Forge::Gitea, L"https://git.example.com", L"tester", L"" };
     const std::wstring key = L"coretest:" + std::to_wstring(UnixNow());
@@ -199,8 +226,10 @@ static void TestAccounts(const std::filesystem::path& dir) {
     std::wstring err;
     CHECK(AddAccount(a, "tok3n", &err));
     const std::vector<std::string> authEnv = GitAuthEnvironment({ a });
-    CHECK(authEnv.size() == 3 && authEnv[0] == "GIT_CONFIG_COUNT=1" && authEnv[1] == "GIT_CONFIG_KEY_0=http.https://git.example.com/.extraHeader" &&
-          authEnv[2] == "GIT_CONFIG_VALUE_0=Authorization: Basic " + Base64("tester:tok3n"));
+    CHECK(authEnv.size() == 7 && authEnv[0] == "GIT_CONFIG_COUNT=3" && authEnv[1] == "GIT_CONFIG_KEY_0=http.https://git.example.com/.extraHeader" &&
+          authEnv[2] == "GIT_CONFIG_VALUE_0=Authorization: Basic " + Base64("tester:tok3n") &&
+          authEnv[3] == "GIT_CONFIG_KEY_1=url.https://git.example.com/.insteadOf" && authEnv[4] == "GIT_CONFIG_VALUE_1=git@git.example.com:" &&
+          authEnv[6] == "GIT_CONFIG_VALUE_2=ssh://git@git.example.com/");
     RemoveAccount(a);
     CHECK(GitAuthEnvironment({ a }).empty());
     CHECK(LoadAccounts().size() == before.size());

@@ -234,8 +234,11 @@ la finestra standard con una toolbar di pannelli (*Mangrove › Settings…*, `�
 - **Fetch, Pull e Push** via HTTPS verso il server di un account usano il suo token: git lo riceve
   per quella sola esecuzione da variabili d'ambiente (`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_n`,
   `GIT_CONFIG_VALUE_n`: un `http.<server>/.extraHeader`, git 2.31 o successivo), quindi mai sulla
-  riga di comando né nella configurazione di git, e lo invia solo a quel server. I remoti via SSH o
-  su altri server funzionano come prima.
+  riga di comando né nella configurazione di git, e lo invia solo a quel server. Anche i remoti con
+  un indirizzo SSH dello stesso server (`git@github.com:…`, `ssh://git@github.com/…`) passano dal
+  token: in quelle esecuzioni git li legge come indirizzi HTTPS (`url.<server>/.insteadOf`), così
+  non serve una chiave SSH. Gli altri remoti (altri server, alias SSH di `~/.ssh/config`) funzionano
+  come prima; se un server rifiuta la chiave SSH, il messaggio suggerisce di collegare l'account.
 
 #### L'app OAuth di GitHub
 

@@ -181,7 +181,8 @@ std::wstring PullModeHelp() {
 }
 
 std::wstring AccountsIntro() {
-    return L"Connect your accounts to fetch, pull and push over HTTPS without being asked for a password. Each token is kept in " +
+    return L"Connect your accounts to fetch, pull and push without being asked for a password or an SSH key: Mangrove uses an "
+           L"account for every remote on its server, https:// and git@ addresses alike. Each token is kept in " +
            SecretStoreName() + L", never in Mangrove's files, and is sent only to its own server.";
 }
 
