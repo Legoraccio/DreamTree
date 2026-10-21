@@ -132,7 +132,7 @@ int64_t UnixNow() {
 }
 
 bool TestMode() {
-    static const bool on = !EnvVar("DREAMTREE_DEBUG").empty();
+    static const bool on = !EnvVar("MANGROVE_DEBUG").empty();
     return on;
 }
 

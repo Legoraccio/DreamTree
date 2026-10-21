@@ -1,10 +1,10 @@
-# DreamTree build script for Windows (the macOS app is built by build-mac.sh).
+# Mangrove build script for Windows (the macOS app is built by build-mac.sh).
 # Compiles the shared core (src\core) and the Windows interface (src\windows) with the MSVC toolset from
 # Visual Studio and the Windows SDK from the official Microsoft NuGet packages (downloaded into .\deps on
 # first run, no admin needed).
 #
-#   .\build.ps1            release build -> bin\DreamTree.exe
-#   .\build.ps1 -Dbg       debug build   -> bin\DreamTree-debug.exe
+#   .\build.ps1            release build -> bin\Mangrove.exe
+#   .\build.ps1 -Dbg       debug build   -> bin\Mangrove-debug.exe
 #   .\build.ps1 -Run       build and launch
 
 param([switch]$Dbg, [switch]$Run, [string]$Src = "src", [string]$Out = "")
@@ -48,7 +48,7 @@ $srcDir = if ([IO.Path]::IsPathRooted($Src)) { $Src } else { Join-Path $root $Sr
 $objDir = Join-Path $root "build\$cfg"
 $binDir = Join-Path $root 'bin'
 New-Item -ItemType Directory -Force $objDir, $binDir | Out-Null
-if (-not $Out) { $Out = if ($Dbg) { 'DreamTree-debug.exe' } else { 'DreamTree.exe' } }
+if (-not $Out) { $Out = if ($Dbg) { 'Mangrove-debug.exe' } else { 'Mangrove.exe' } }
 $exe = Join-Path $binDir $Out
 
 $common = @('/nologo', '/c', '/std:c++20', '/EHsc', '/W3', '/utf-8', '/permissive-', '/Zc:__cplusplus',

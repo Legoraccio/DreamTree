@@ -14,17 +14,17 @@ constexpr CGFloat kNodeR = 4.5;
 
 }  // namespace
 
-@interface DTHistoryCell : NSTableCellView
+@interface MGHistoryCell : NSTableCellView
 @property(nonatomic) Column column;
 @property(nonatomic) NSInteger row;
-@property(nonatomic, weak) DTHistoryController* owner;
+@property(nonatomic, weak) MGHistoryController* owner;
 @end
 
-@interface DTHistoryController ()
-- (void)drawCell:(DTHistoryCell*)cell;
+@interface MGHistoryController ()
+- (void)drawCell:(MGHistoryCell*)cell;
 @end
 
-@implementation DTHistoryCell
+@implementation MGHistoryCell
 
 - (BOOL)isFlipped {
     return YES;
@@ -37,10 +37,10 @@ constexpr CGFloat kNodeR = 4.5;
 @end
 
 // A selection that leaves the text and the graph colors as they are: a tinted rounded rectangle.
-@interface DTHistoryRowView : NSTableRowView
+@interface MGHistoryRowView : NSTableRowView
 @end
 
-@implementation DTHistoryRowView
+@implementation MGHistoryRowView
 
 - (void)drawSelectionInRect:(NSRect)dirty {
     [[NSColor.controlAccentColor colorWithAlphaComponent:self.emphasized ? 0.22 : 0.12] setFill];
@@ -161,8 +161,8 @@ static void DrawChip(const RepoData& d, const GraphRow& row, NSRect b) {
 
 // ---------------------------------------------------------------- controller
 
-@implementation DTHistoryController {
-    __weak DTRepoWindowController* _owner;
+@implementation MGHistoryController {
+    __weak MGRepoWindowController* _owner;
     NSTableView* _table;
     NSScrollView* _scroll;
     NSSegmentedControl* _scope;
@@ -174,7 +174,7 @@ static void DrawChip(const RepoData& d, const GraphRow& row, NSRect b) {
     BOOL _statsQueued;
 }
 
-- (instancetype)initWithOwner:(DTRepoWindowController*)owner {
+- (instancetype)initWithOwner:(MGRepoWindowController*)owner {
     if ((self = [super initWithNibName:nil bundle:nil])) _owner = owner;
     return self;
 }
@@ -282,9 +282,9 @@ static void DrawChip(const RepoData& d, const GraphRow& row, NSRect b) {
 
 - (NSView*)tableView:(NSTableView*)tv viewForTableColumn:(NSTableColumn*)col row:(NSInteger)row {
     NSString* ident = col.identifier;
-    DTHistoryCell* cell = [tv makeViewWithIdentifier:ident owner:self];
+    MGHistoryCell* cell = [tv makeViewWithIdentifier:ident owner:self];
     if (!cell) {
-        cell = [[DTHistoryCell alloc] initWithFrame:NSMakeRect(0, 0, col.width, kRowH)];
+        cell = [[MGHistoryCell alloc] initWithFrame:NSMakeRect(0, 0, col.width, kRowH)];
         cell.identifier = ident;
         cell.owner = self;
         cell.column = [ident isEqualToString:@"refs"] ? kRefs : [ident isEqualToString:@"graph"] ? kGraph : [ident isEqualToString:@"commit"] ? kCommit : kChanges;
@@ -296,9 +296,9 @@ static void DrawChip(const RepoData& d, const GraphRow& row, NSRect b) {
 }
 
 - (NSTableRowView*)tableView:(NSTableView*)tv rowViewForRow:(NSInteger)row {
-    DTHistoryRowView* v = [tv makeViewWithIdentifier:@"row" owner:self];
+    MGHistoryRowView* v = [tv makeViewWithIdentifier:@"row" owner:self];
     if (!v) {
-        v = [[DTHistoryRowView alloc] init];
+        v = [[MGHistoryRowView alloc] init];
         v.identifier = @"row";
     }
     return v;
@@ -316,7 +316,7 @@ static void DrawChip(const RepoData& d, const GraphRow& row, NSRect b) {
     return [lines componentsJoinedByString:@"\n"];
 }
 
-- (void)drawCell:(DTHistoryCell*)cell {
+- (void)drawCell:(MGHistoryCell*)cell {
     RepoSession* s = _owner.session;
     if (!s || !s->graph || !s->data || cell.row < 0 || cell.row >= (NSInteger)s->graph->rows.size()) return;
     const Graph& g = *s->graph;

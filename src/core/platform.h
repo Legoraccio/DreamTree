@@ -37,7 +37,8 @@ bool ReadWholeFile(const std::wstring& path, std::string& out, size_t maxBytes =
 bool WriteFileAtomic(const std::wstring& path, const std::string& bytes);  // replaces the file in one step
 std::wstring WriteTempFile(const std::string& bytes);                     // new temporary file; empty on failure
 void RemoveFile(const std::wstring& path);
-std::wstring AppDataDir();             // per-user folder for DreamTree's settings (created on demand)
+std::wstring AppDataDir();             // per-user folder for Mangrove's settings (created on demand)
+std::wstring OldAppDataDir();          // the same folder of DreamTree, as Mangrove was called before (not created)
 std::wstring EnvVar(const char* name);  // empty when unset
 
 // ---------------------------------------------------------------- processes
@@ -53,7 +54,7 @@ int RunProcess(const std::wstring& exe, const std::wstring& args, const std::wst
                const Sink& outSink = nullptr, const Sink& errSink = nullptr, const std::vector<std::string>& env = {});
 
 // ---------------------------------------------------------------- network
-// An HTTPS GET request, without following redirects. Blocking: call it on a worker thread.
+// HTTPS requests, without following redirects. Blocking: call them on a worker thread.
 struct HttpResponse {
     int status = 0;  // 0: no answer (error says why)
     std::string body, error;
@@ -70,10 +71,12 @@ struct HttpResponse {
     }
 };
 HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& headers);  // "Name: value" headers
+// A POST of a form (application/x-www-form-urlencoded, encoded by the caller).
+HttpResponse HttpPost(const std::string& url, const std::vector<std::string>& headers, const std::string& form);
 
 // ---------------------------------------------------------------- secrets
 // The user's credential store (Windows Credential Manager, the macOS keychain): secrets stay there, never in
-// DreamTree's files. `key` names the secret, `label` describes it to the user.
+// Mangrove's files. `key` names the secret, `label` describes it to the user.
 bool SecretSave(const std::wstring& key, const std::string& secret, const std::wstring& label);
 bool SecretLoad(const std::wstring& key, std::string& secret);
 void SecretDelete(const std::wstring& key);

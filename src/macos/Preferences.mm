@@ -1,6 +1,6 @@
 // Settings: the preferences by category in the standard settings window, a toolbar of panes. General,
-// Appearance, Git, and Integrations: the accounts on GitHub, GitLab and Gitea / Forgejo, whose tokens are
-// kept in the keychain.
+// Appearance, Git, and Integrations: the accounts on GitHub, GitLab and Gitea / Forgejo, connected by signing in
+// with the browser (github.com) or with a token, and kept in the keychain.
 
 #import "MacUI.h"
 
@@ -13,7 +13,7 @@ void ApplyAppearance() {
 
 static void SettingsChanged() {
     AppSettings().Save();
-    [NSNotificationCenter.defaultCenter postNotificationName:DTSettingsChangedNotification object:nil];
+    [NSNotificationCenter.defaultCenter postNotificationName:MGSettingsChangedNotification object:nil];
 }
 
 static NSTextField* RowLabel(NSString* text) {
@@ -38,11 +38,11 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
 }
 
 // A pane: its content with the margins of a settings window, as big as it needs.
-@interface DTPane : NSViewController
+@interface MGPane : NSViewController
 - (void)setContent:(NSView*)content;
 @end
 
-@implementation DTPane
+@implementation MGPane
 
 - (void)setContent:(NSView*)content {
     NSView* v = [[NSView alloc] init];
@@ -67,10 +67,10 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
 
 // ---------------------------------------------------------------- General
 
-@interface DTGeneralPane : DTPane
+@interface MGGeneralPane : MGPane
 @end
 
-@implementation DTGeneralPane {
+@implementation MGGeneralPane {
     NSButton* _reopen;
     NSPopUpButton* _pull;
     NSPopUpButton* _diff;
@@ -115,10 +115,10 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
 
 // ---------------------------------------------------------------- Appearance
 
-@interface DTAppearancePane : DTPane
+@interface MGAppearancePane : MGPane
 @end
 
-@implementation DTAppearancePane {
+@implementation MGAppearancePane {
     NSPopUpButton* _theme;
 }
 
@@ -151,10 +151,10 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
 
 // ---------------------------------------------------------------- Git
 
-@interface DTGitPane : DTPane <NSTableViewDataSource, NSTableViewDelegate>
+@interface MGGitPane : MGPane <NSTableViewDataSource, NSTableViewDelegate>
 @end
 
-@implementation DTGitPane {
+@implementation MGGitPane {
     NSTextField* _git;
     NSTableView* _trusted;
     NSButton* _remove;
@@ -254,11 +254,11 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
 // ---------------------------------------------------------------- Integrations
 
 // The initials of an account on a color of its own.
-@interface DTInitialsView : NSView
+@interface MGInitialsView : NSView
 @property(nonatomic) Account account;
 @end
 
-@implementation DTInitialsView
+@implementation MGInitialsView
 
 - (void)drawRect:(NSRect)dirty {
     Author a;  // the same initials and color as in the Windows app
@@ -269,17 +269,17 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
 
 @end
 
-@interface DTAccountCell : NSTableCellView
-@property(nonatomic, strong) DTInitialsView* avatar;
+@interface MGAccountCell : NSTableCellView
+@property(nonatomic, strong) MGInitialsView* avatar;
 @property(nonatomic, strong) NSTextField* title;
 @property(nonatomic, strong) NSTextField* detail;
 @end
 
-@implementation DTAccountCell
+@implementation MGAccountCell
 
 - (instancetype)initWithFrame:(NSRect)frame {
     if (!(self = [super initWithFrame:frame])) return nil;
-    _avatar = [[DTInitialsView alloc] init];
+    _avatar = [[MGInitialsView alloc] init];
     _title = MakeLabel(@"", [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold], NSColor.labelColor);
     _detail = MakeLabel(@"", [NSFont systemFontOfSize:11], NSColor.secondaryLabelColor);
     for (NSView* v in @[ _avatar, _title, _detail ]) {
@@ -303,12 +303,14 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
 
 @end
 
-// The sheet that connects an account: the service, its server, and a token checked with the server.
-@interface DTAddAccountController : NSWindowController
+// The sheet that connects an account: the service, its server, then signing in with the browser (a code to
+// enter on GitHub, where Mangrove has an OAuth app) or a token; either way the token is checked with the server.
+@interface MGAddAccountController : NSWindowController <NSTextFieldDelegate>
 - (instancetype)initWithDone:(void (^)(NSString* note))done;
+- (void)showSampleCode;  // the code view without asking GitHub (interface test)
 @end
 
-@implementation DTAddAccountController {
+@implementation MGAddAccountController {
     void (^_done)(NSString*);
     NSPopUpButton* _service;
     NSTextField* _server;
@@ -319,6 +321,22 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
     NSButton* _connect;
     NSButton* _cancel;
     BOOL _busy;
+    // signing in with the browser
+    NSGridView* _grid;
+    NSButton* _browser;
+    NSStackView* _codeView;
+    NSTextField* _codeIntro;
+    NSTextField* _code;
+    NSButton* _open;
+    NSProgressIndicator* _codeSpinner;
+    NSTextField* _codeStatus;
+    NSString* _verifyUrl;
+    std::shared_ptr<std::atomic<bool>> _signInCancel;  // set to stop the sign-in's worker thread
+    BOOL _signingIn;
+}
+
+- (void)dealloc {
+    if (_signInCancel) *_signInCancel = true;  // the sheet went away: no one waits for the authorization any more
 }
 
 - (instancetype)initWithDone:(void (^)(NSString*))done {
@@ -335,7 +353,9 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
     _service.action = @selector(serviceChanged:);
     _server = [NSTextField textFieldWithString:@""];
     _server.placeholderString = @"https://";
+    _server.delegate = self;
     [_server.widthAnchor constraintEqualToConstant:320].active = YES;
+    _browser = [NSButton buttonWithTitle:@"Sign In with Browser…" target:self action:@selector(signIn:)];
     NSButton* create = [NSButton buttonWithTitle:@"Create a Token…" target:self action:@selector(createToken:)];
     _help = HelpLabel(@"", 320);
     _token = [[NSSecureTextField alloc] init];
@@ -349,22 +369,43 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
     _status = HelpLabel(@"", 300);
     NSStackView* status = [NSStackView stackViewWithViews:@[ _spinner, _status ]];
     status.spacing = 6;
-    NSGridView* grid = Grid(@[
+    _grid = Grid(@[
         @[ RowLabel(@"Service:"), _service ],
         @[ RowLabel(@"Server:"), _server ],
         @[ NSGridCell.emptyContentView, HelpLabel(@"Change it for GitHub Enterprise, a self-managed GitLab or another Gitea / Forgejo server.", 320) ],
-        @[ NSGridCell.emptyContentView, create ],
+        @[ RowLabel(@"Sign in:"), _browser ],
+        @[ NSGridCell.emptyContentView, HelpLabel(@"Mangrove shows a code to enter on GitHub: once you authorize Mangrove there, the "
+                                                  @"account is connected, with no token to copy.", 320) ],
+        @[ RowLabel(@"Token:"), create ],
         @[ NSGridCell.emptyContentView, _help ],
-        @[ RowLabel(@"Token:"), _token ],
+        @[ NSGridCell.emptyContentView, _token ],
         @[ NSGridCell.emptyContentView, status ],
     ]);
+
+    // Signing in: the code to enter on GitHub, in place of the token.
+    _codeIntro = MakeLabel(@"Enter this code on GitHub, then authorize Mangrove:", nil, nil);
+    _code = MakeLabel(@"", [NSFont monospacedSystemFontOfSize:26 weight:NSFontWeightSemibold], NSColor.labelColor);
+    _code.selectable = YES;
+    _open = [NSButton buttonWithTitle:@"Copy Code and Open GitHub" target:self action:@selector(openSignInPage:)];
+    _codeSpinner = [[NSProgressIndicator alloc] init];
+    _codeSpinner.style = NSProgressIndicatorStyleSpinning;
+    _codeSpinner.controlSize = NSControlSizeSmall;
+    _codeSpinner.displayedWhenStopped = NO;
+    _codeStatus = HelpLabel(@"", 360);
+    NSStackView* codeStatus = [NSStackView stackViewWithViews:@[ _codeSpinner, _codeStatus ]];
+    codeStatus.spacing = 6;
+    _codeView = [NSStackView stackViewWithViews:@[ _codeIntro, _code, _open, codeStatus ]];
+    _codeView.orientation = NSUserInterfaceLayoutOrientationVertical;
+    _codeView.alignment = NSLayoutAttributeLeading;
+    _codeView.spacing = 12;
+    _codeView.hidden = YES;
     _cancel = [NSButton buttonWithTitle:@"Cancel" target:self action:@selector(cancel:)];
     _cancel.keyEquivalent = @"\033";
     _connect = [NSButton buttonWithTitle:@"Connect" target:self action:@selector(connect:)];
     _connect.keyEquivalent = @"\r";
     NSStackView* buttons = [NSStackView stackViewWithViews:@[ _cancel, _connect ]];
     buttons.spacing = 10;
-    NSStackView* all = [NSStackView stackViewWithViews:@[ title, grid, buttons ]];
+    NSStackView* all = [NSStackView stackViewWithViews:@[ title, _grid, _codeView, buttons ]];
     all.orientation = NSUserInterfaceLayoutOrientationVertical;
     all.alignment = NSLayoutAttributeLeading;
     all.spacing = 16;
@@ -392,6 +433,18 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
     _server.stringValue = NS(f.server);
     _help.stringValue = NS(f.tokenHelp);
     _status.stringValue = @"";
+    [self updateBrowser];
+}
+
+// Signing in with the browser is offered where Mangrove has an OAuth app (github.com).
+- (void)updateBrowser {
+    const BOOL available = !_signingIn && BrowserSignInAvailable([self forge], WS(_server.stringValue));
+    [_grid rowAtIndex:3].hidden = !available;
+    [_grid rowAtIndex:4].hidden = !available;
+}
+
+- (void)controlTextDidChange:(NSNotification*)note {
+    if (note.object == _server) [self updateBrowser];
 }
 
 - (void)createToken:(id)sender {
@@ -412,7 +465,7 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
 
 - (void)setBusy:(BOOL)busy {
     _busy = busy;
-    for (NSControl* c in @[ _service, _server, _token, _connect ]) c.enabled = !busy;
+    for (NSControl* c in @[ _service, _server, _token, _connect, _browser ]) c.enabled = !busy;
     if (busy) [_spinner startAnimation:nil];
     else [_spinner stopAnimation:nil];
 }
@@ -424,11 +477,11 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
     const std::string token = Narrow(WS(_token.stringValue));
     [self setBusy:YES];
     [self showStatus:@"Checking the token…" error:NO];
-    __weak DTAddAccountController* weakSelf = self;
+    __weak MGAddAccountController* weakSelf = self;
     std::thread([weakSelf, f, server, token] {
         const TokenCheck check = CheckToken(f, server, token);
         RunOnMain([weakSelf, check, token] {
-            DTAddAccountController* me = weakSelf;
+            MGAddAccountController* me = weakSelf;
             if (me) [me finish:check token:token];
         });
     }).detach();
@@ -447,23 +500,105 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
     [self.window makeFirstResponder:_token];
 }
 
+// A worker thread asks GitHub for a code, then waits for the user to authorize Mangrove on GitHub
+// (src/core/accounts.cpp). Cancel goes back to the form.
+- (void)signIn:(id)sender {
+    if (_busy || _signingIn) return;
+    const Forge f = [self forge];
+    const std::wstring server = WS(_server.stringValue);
+    auto cancel = std::make_shared<std::atomic<bool>>(false);
+    _signInCancel = cancel;
+    [self showCode:nil url:nil];
+    __weak MGAddAccountController* weakSelf = self;
+    std::thread([weakSelf, f, server, cancel] {
+        std::string token;
+        const TokenCheck check = BrowserSignIn(
+            f, server,
+            [weakSelf, cancel](const DeviceCode& code) {
+                const std::wstring userCode = code.userCode, url = code.verifyUrl;
+                RunOnMain([weakSelf, cancel, userCode, url] {
+                    MGAddAccountController* me = weakSelf;
+                    if (me && !*cancel) [me showCode:NS(userCode) url:NS(url)];
+                });
+            },
+            *cancel, &token);
+        RunOnMain([weakSelf, cancel, check, token] {
+            MGAddAccountController* me = weakSelf;
+            if (me && !*cancel) [me signedIn:check token:token];
+        });
+    }).detach();
+}
+
+// The code to enter on GitHub (nil while it is being asked for), in place of the token.
+- (void)showCode:(NSString*)code url:(NSString*)url {
+    _signingIn = YES;
+    _verifyUrl = url;
+    for (NSInteger i = 3; i < _grid.numberOfRows; ++i) [_grid rowAtIndex:i].hidden = YES;
+    _service.enabled = _server.enabled = NO;
+    _codeView.hidden = NO;
+    _codeIntro.hidden = _code.hidden = _open.hidden = code == nil;
+    _code.stringValue = code ?: @"";
+    _codeStatus.stringValue = code ? @"Waiting for you to authorize Mangrove on GitHub…" : @"Asking GitHub for a code…";
+    [_codeSpinner startAnimation:nil];
+    _connect.hidden = YES;
+    _connect.keyEquivalent = @"";
+    _open.keyEquivalent = @"\r";
+}
+
+- (void)endSignIn {
+    if (_signInCancel) *_signInCancel = true;  // the worker stops at its next look, and its results are dropped
+    _signInCancel.reset();
+    _signingIn = NO;
+    [_codeSpinner stopAnimation:nil];
+    _codeView.hidden = YES;
+    _open.keyEquivalent = @"";
+    _connect.keyEquivalent = @"\r";
+    _connect.hidden = NO;
+    _service.enabled = _server.enabled = YES;
+    for (NSInteger i = 3; i < _grid.numberOfRows; ++i) [_grid rowAtIndex:i].hidden = NO;
+    [self updateBrowser];
+}
+
+// The code goes to the clipboard, ready to paste on the page; the page is always the server's (BrowserSignIn
+// checks it).
+- (void)openSignInPage:(id)sender {
+    if (!_verifyUrl.length || !_code.stringValue.length) return;
+    [NSPasteboard.generalPasteboard clearContents];
+    [NSPasteboard.generalPasteboard setString:_code.stringValue forType:NSPasteboardTypeString];
+    NSURL* url = [NSURL URLWithString:_verifyUrl];
+    if (url) [NSWorkspace.sharedWorkspace openURL:url];
+}
+
+- (void)signedIn:(const TokenCheck&)check token:(const std::string&)token {
+    [self endSignIn];
+    [self finish:check token:token];
+}
+
+- (void)showSampleCode {
+    [self showCode:@"WDJB-MJHT" url:@"https://github.com/login/device"];
+}
+
 - (void)cancel:(id)sender {
+    if (_signingIn) {  // back to the form
+        [self endSignIn];
+        return;
+    }
     _token.stringValue = @"";
     [self.window.sheetParent endSheet:self.window returnCode:NSModalResponseCancel];
 }
 
 @end
 
-@interface DTIntegrationsPane : DTPane <NSTableViewDataSource, NSTableViewDelegate>
+@interface MGIntegrationsPane : MGPane <NSTableViewDataSource, NSTableViewDelegate>
 - (void)addAccount:(id)sender;
 @end
 
-@implementation DTIntegrationsPane {
+@implementation MGIntegrationsPane {
     NSTableView* _table;
     NSButton* _remove;
     NSTextField* _note;
     std::vector<Account> _accounts;
-    DTAddAccountController* _sheet;
+    MGAddAccountController* _sheet;
 }
 
 - (void)loadView {
@@ -518,9 +653,9 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
 }
 
 - (NSView*)tableView:(NSTableView*)tv viewForTableColumn:(NSTableColumn*)col row:(NSInteger)row {
-    DTAccountCell* cell = [tv makeViewWithIdentifier:@"account" owner:self];
+    MGAccountCell* cell = [tv makeViewWithIdentifier:@"account" owner:self];
     if (!cell) {
-        cell = [[DTAccountCell alloc] initWithFrame:NSZeroRect];
+        cell = [[MGAccountCell alloc] initWithFrame:NSZeroRect];
         cell.identifier = @"account";
     }
     if (row < 0 || row >= (NSInteger)_accounts.size()) return cell;
@@ -538,9 +673,9 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
 
 - (void)addAccount:(id)sender {
     if (_sheet || !self.view.window) return;
-    __weak DTIntegrationsPane* weakSelf = self;
-    _sheet = [[DTAddAccountController alloc] initWithDone:^(NSString* note) {
-        DTIntegrationsPane* me = weakSelf;
+    __weak MGIntegrationsPane* weakSelf = self;
+    _sheet = [[MGAddAccountController alloc] initWithDone:^(NSString* note) {
+        MGIntegrationsPane* me = weakSelf;
         if (!me) return;
         [me reload];
         me->_note.stringValue = note.length ? note : @"";
@@ -548,7 +683,7 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
     }];
     [self.view.window beginSheet:_sheet.window
                completionHandler:^(NSModalResponse r) {
-                   DTIntegrationsPane* me = weakSelf;
+                   MGIntegrationsPane* me = weakSelf;
                    if (me) me->_sheet = nil;
                }];
 }
@@ -557,7 +692,7 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
     const NSInteger row = _table.selectedRow;
     if (row < 0 || row >= (NSInteger)_accounts.size()) return;
     const Account a = _accounts[(size_t)row];
-    __weak DTIntegrationsPane* weakSelf = self;
+    __weak MGIntegrationsPane* weakSelf = self;
     RunPrompt(self.view.window, RemoveAccountPrompt(a), ^(int b) {
         if (b != 0) return;
         RemoveAccount(a);
@@ -573,34 +708,38 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
     return _sheet.window;
 }
 
+- (void)showSignInSample {
+    [_sheet showSampleCode];
+}
+
 @end
 
 // ---------------------------------------------------------------- the window
 
-@implementation DTPreferencesController {
+@implementation MGPreferencesController {
     NSTabViewController* _tabs;
-    DTIntegrationsPane* _integrations;
+    MGIntegrationsPane* _integrations;
 }
 
 + (instancetype)shared {
-    static DTPreferencesController* shared;
-    if (!shared) shared = [[DTPreferencesController alloc] init];
+    static MGPreferencesController* shared;
+    if (!shared) shared = [[MGPreferencesController alloc] init];
     return shared;
 }
 
 - (instancetype)init {
     NSTabViewController* tabs = [[NSTabViewController alloc] init];
     tabs.tabStyle = NSTabViewControllerTabStyleToolbar;
-    DTIntegrationsPane* integrations = [[DTIntegrationsPane alloc] initWithNibName:nil bundle:nil];
+    MGIntegrationsPane* integrations = [[MGIntegrationsPane alloc] initWithNibName:nil bundle:nil];
     const struct {
         NSViewController* pane;
         NSString* label;
         NSString* symbol;
         NSString* ident;
     } panes[] = {
-        { [[DTGeneralPane alloc] initWithNibName:nil bundle:nil], @"General", @"gearshape", @"general" },
-        { [[DTAppearancePane alloc] initWithNibName:nil bundle:nil], @"Appearance", @"paintpalette", @"appearance" },
-        { [[DTGitPane alloc] initWithNibName:nil bundle:nil], @"Git", @"arrow.triangle.branch", @"git" },
+        { [[MGGeneralPane alloc] initWithNibName:nil bundle:nil], @"General", @"gearshape", @"general" },
+        { [[MGAppearancePane alloc] initWithNibName:nil bundle:nil], @"Appearance", @"paintpalette", @"appearance" },
+        { [[MGGitPane alloc] initWithNibName:nil bundle:nil], @"Git", @"arrow.triangle.branch", @"git" },
         { integrations, @"Integrations", @"person.crop.circle", @"integrations" },
     };
     for (const auto& p : panes) {
@@ -639,6 +778,10 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
 
 - (NSWindow*)sheetWindow {
     return [_integrations sheetWindow];
+}
+
+- (void)showSignInSample {
+    [_integrations showSignInSample];
 }
 
 @end

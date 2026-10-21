@@ -1,6 +1,6 @@
-// Pictures of the windows for the interface smoke test (tools\uitest\win-snapshots.ps1). With DREAMTREE_SNAPSHOT
-// set to a folder, DreamTree waits for the repository of its tab to load, then saves what the screen shows of
-// the main window and of the pages of the settings window (in the Windows themes and in DreamTree's), writes
+// Pictures of the windows for the interface smoke test (tools\uitest\win-snapshots.ps1). With MANGROVE_SNAPSHOT
+// set to a folder, Mangrove waits for the repository of its tab to load, then saves what the screen shows of
+// the main window and of the pages of the settings window (in the Windows themes and in Mangrove's), writes
 // snapshots.log there and quits. The windows stay on top meanwhile: nothing else may cover them.
 
 #include "app.h"
@@ -116,25 +116,29 @@ void Step() {
         return Next(6, 900);
     case 6:
         SaveWindow(SettingsWindowHandle(), L"6-settings-token.png");
+        SettingsForSnapshot(2);  // signing in with the browser: the code
+        return Next(7, 900);
+    case 7:
+        SaveWindow(SettingsWindowHandle(), L"7-settings-sign-in.png");
         SettingsForSnapshot(0);
         CloseSettings();
         SetTheme(th::Theme::Dark);
-        return Next(7, 1200);
-    case 7:
-        SaveWindow(g_app->hwnd, L"7-main-dark.png");
-        ShowSettings(3);
         return Next(8, 1200);
     case 8:
-        SaveWindow(SettingsWindowHandle(), L"8-settings-dark.png");
-        CloseSettings();
-        SetTheme(th::Theme::DreamTree);
+        SaveWindow(g_app->hwnd, L"8-main-dark.png");
+        ShowSettings(3);
         return Next(9, 1200);
     case 9:
-        SaveWindow(g_app->hwnd, L"9-main-dreamtree.png");
-        ShowSettings(0);
+        SaveWindow(SettingsWindowHandle(), L"9-settings-dark.png");
+        CloseSettings();
+        SetTheme(th::Theme::Mangrove);
         return Next(10, 1200);
     case 10:
-        SaveWindow(SettingsWindowHandle(), L"10-settings-dreamtree.png");
+        SaveWindow(g_app->hwnd, L"10-main-mangrove.png");
+        ShowSettings(0);
+        return Next(11, 1200);
+    case 11:
+        SaveWindow(SettingsWindowHandle(), L"11-settings-mangrove.png");
         CloseSettings();
         SetTheme(th::Theme::System);
         Log(L"done");
@@ -148,7 +152,7 @@ void Step() {
 }  // namespace
 
 void StartSnapshots() {
-    g_dir = EnvVar("DREAMTREE_SNAPSHOT");
+    g_dir = EnvVar("MANGROVE_SNAPSHOT");
     if (g_dir.empty() || !g_app || !g_app->hwnd) return;
     CreateDirectoryW(g_dir.c_str(), nullptr);
     // On top of everything (the settings window, which it owns, too) while the screen is read.

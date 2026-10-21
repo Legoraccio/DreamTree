@@ -1,7 +1,7 @@
 #pragma once
 #include "base.h"
 
-// Accounts on code hosting services (GitHub, GitLab, Gitea / Forgejo), shared by the apps. DreamTree keeps
+// Accounts on code hosting services (GitHub, GitLab, Gitea / Forgejo), shared by the apps. Mangrove keeps
 // the list (service, server, user name) in its settings and each access token in the user's credential store
 // (Windows Credential Manager, the macOS keychain), never in a file. Fetch, pull and push over HTTPS to an
 // account's server use its token.
@@ -44,6 +44,37 @@ TokenCheck CheckToken(Forge f, const std::wstring& server, const std::string& to
 // same server. False, with the reason, when the credential store refuses it.
 bool AddAccount(const Account& a, const std::string& token, std::wstring* error);
 void RemoveAccount(const Account& a);
+
+// ---- signing in with the browser (OAuth 2.0 device authorization grant, RFC 8628)
+// Mangrove asks the service for a one-time code, the user enters it on the service's site and authorizes
+// Mangrove there, and Mangrove receives a token for the account, then checks and keeps it like a pasted one.
+// Only where Mangrove has a registered OAuth app: github.com (GitLab's OAuth tokens expire after two hours).
+bool BrowserSignInAvailable(Forge f, const std::wstring& server);
+
+struct DeviceCode {
+    std::wstring error;      // why the service gave no code; empty when it did
+    std::string deviceCode;  // what Mangrove asks for the token with
+    std::wstring userCode;   // what the user enters on the site: "WDJB-MJHT"
+    std::wstring verifyUrl;  // where: "https://github.com/login/device"
+    int interval = 5;        // seconds between two questions
+    int expiresIn = 900;     // seconds the code lives
+};
+enum class DeviceState : uint8_t { Pending, SlowDown, Granted, Denied, Expired, Failed };
+struct DevicePoll {
+    DeviceState state = DeviceState::Failed;
+    std::wstring error;  // Failed: why
+    std::string token;   // Granted
+    int interval = 0;    // SlowDown: the interval the service asks for, when it says
+};
+// The service's answers (HTTP status and body), read. Separate for the tests.
+DeviceCode ParseDeviceCode(int status, const std::string& body);
+DevicePoll ParseDevicePoll(int status, const std::string& body);
+
+// The whole sign-in, blocking (a worker thread): asks for a code and gives it to onCode (to show it), then
+// asks every few seconds whether the user authorized Mangrove, until they did, refused, the code expired or
+// cancel became true. Then checks the token like CheckToken; *token receives it when the check is ok.
+TokenCheck BrowserSignIn(Forge f, const std::wstring& server, const std::function<void(const DeviceCode&)>& onCode,
+                         const std::atomic<bool>& cancel, std::string* token);
 
 // git's environment for HTTPS fetch, pull and push: each account's token as the authorization of requests to
 // its server (GIT_CONFIG_* variables: never on a command line or in a file). Empty without accounts. Reads

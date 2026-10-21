@@ -1,6 +1,6 @@
 #include <windows.h>
 
-1 ICON "dreamtree.ico"
+1 ICON "mangrove.ico"
 CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "app.manifest"
 
 VS_VERSION_INFO VERSIONINFO
@@ -14,12 +14,12 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "FileDescription", "DreamTree - native Git client"
+            VALUE "FileDescription", "Mangrove - native Git client"
             VALUE "FileVersion", "1.1.0.0"
-            VALUE "ProductName", "DreamTree"
+            VALUE "ProductName", "Mangrove"
             VALUE "ProductVersion", "1.1.0.0"
-            VALUE "InternalName", "DreamTree"
-            VALUE "OriginalFilename", "DreamTree.exe"
+            VALUE "InternalName", "Mangrove"
+            VALUE "OriginalFilename", "Mangrove.exe"
         END
     END
     BLOCK "VarFileInfo"

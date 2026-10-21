@@ -1,8 +1,8 @@
 #pragma once
 #include "base.h"
 
-// DreamTree's settings, shared by the apps: a key=value text file (settings.ini in AppDataDir(), or the
-// file named by DREAMTREE_SETTINGS). Preferences both apps use have fields; anything else (window
+// Mangrove's settings, shared by the apps: a key=value text file (settings.ini in AppDataDir(), or the
+// file named by MANGROVE_SETTINGS). Preferences both apps use have fields; anything else (window
 // placement, zoom, ...) is kept by key for the app that owns it.
 class Settings {
 public:

@@ -161,7 +161,7 @@ Prompt RevertPrompt(const RepoData& d, int32_t commit) {
 Prompt RemoveAccountPrompt(const Account& a) {
     Prompt p;
     p.title = std::wstring(L"Remove the ") + InfoOf(a.forge).name + L" account " + a.login + L"?";
-    p.message = L"DreamTree forgets the account and deletes its token from " + SecretStoreName() + L". The token stays valid on " + a.Host() +
+    p.message = L"Mangrove forgets the account and deletes its token from " + SecretStoreName() + L". The token stays valid on " + a.Host() +
                 L": revoke it there if you no longer need it.";
     p.buttons = { L"Remove", L"Cancel" };
     p.defaultButton = 1;
@@ -182,12 +182,12 @@ std::wstring PullModeHelp() {
 
 std::wstring AccountsIntro() {
     return L"Connect your accounts to fetch, pull and push over HTTPS without being asked for a password. Each token is kept in " +
-           SecretStoreName() + L", never in DreamTree's files, and is sent only to its own server.";
+           SecretStoreName() + L", never in Mangrove's files, and is sent only to its own server.";
 }
 
 std::wstring TrustedHelp() {
-    return L"Repositories in these folders belong to another user account; DreamTree opens them anyway (git's safe.directory, for "
-           L"DreamTree only). Folders are added with “Trust” when DreamTree can't open a repository.";
+    return L"Repositories in these folders belong to another user account; Mangrove opens them anyway (git's safe.directory, for "
+           L"Mangrove only). Folders are added with “Trust” when Mangrove can't open a repository.";
 }
 
 Prompt DiscardPatchPrompt(const PatchJob& job, const std::wstring& path) {

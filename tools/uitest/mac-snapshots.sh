@@ -1,17 +1,17 @@
 #!/bin/bash
 # Smoke test of the macOS interface: opens a throwaway repository (branches, a merge, tags, a remote, a stash
-# and uncommitted changes) in bin/DreamTree.app, which saves pictures of its window at a few steps
-# (DREAMTREE_SNAPSHOT) and quits. Fails when the app crashes, hangs or doesn't save them.
+# and uncommitted changes) in bin/Mangrove.app, which saves pictures of its window at a few steps
+# (MANGROVE_SNAPSHOT) and quits. Fails when the app crashes, hangs or doesn't save them.
 #
 #   ./tools/uitest/mac-snapshots.sh [output folder]     (default: build/snapshots)
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 out="${1:-$root/build/snapshots}"
-app="$root/bin/DreamTree.app/Contents/MacOS/DreamTree"
+app="$root/bin/Mangrove.app/Contents/MacOS/Mangrove"
 [ -x "$app" ] || { echo "Build the app first: ./build-mac.sh" >&2; exit 1; }
 rm -rf "$out"
 mkdir -p "$out"
-work="$(mktemp -d "${TMPDIR:-/tmp}/dreamtree-ui.XXXXXX")"
+work="$(mktemp -d "${TMPDIR:-/tmp}/mangrove-ui.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 # ---- the repository
@@ -19,7 +19,7 @@ repo="$work/sample-app"
 git init -q -b main "$repo"
 g() { git -C "$repo" -c user.name="Ada Lovelace" -c user.email=ada@example.com "$@" >/dev/null; }
 put() { mkdir -p "$(dirname "$repo/$1")"; printf '%b' "$2" >"$repo/$1"; }
-put README.md '# Sample app\n\nA small project used to test DreamTree.\n'
+put README.md '# Sample app\n\nA small project used to test Mangrove.\n'
 put src/main.c '#include <stdio.h>\n\nint main(void) {\n    printf("hello\\n");\n    return 0;\n}\n'
 g add -A
 g commit -qm "Initial commit"
@@ -33,12 +33,12 @@ g commit -qm "Add a login screen"
 put src/login.c 'int login(const char* user) {\n    if (!user) return 0;\n    return 1;\n}\n'
 g commit -qam "Check the user name before logging in"
 g switch -q main
-put README.md '# Sample app\n\nA small project used to test DreamTree.\n\n## Building\n\nRun make.\n'
+put README.md '# Sample app\n\nA small project used to test Mangrove.\n\n## Building\n\nRun make.\n'
 g commit -qam "Explain how to build"
 g merge -q --no-ff feature/login -m "Merge branch 'feature/login'"
 g tag v1.0
 g switch -q -c fix/typo HEAD~1
-put README.md '# Sample app\n\nA small project used to try DreamTree.\n\n## Building\n\nRun make.\n'
+put README.md '# Sample app\n\nA small project used to try Mangrove.\n\n## Building\n\nRun make.\n'
 g commit -qam "Fix a typo in the readme"
 g switch -q main
 git init -q --bare "$work/origin.git"
@@ -57,7 +57,7 @@ put src/util.h 'int add(int a, int b);\nint sub(int a, int b);\nint mul(int a, i
 # ---- the app
 settings="$work/settings.ini"
 printf 'tab=%s\nactive=0\nrecent=%s\naccount=github\thttps://github.com\toctocat\tThe Octocat\n' "$repo" "$repo" >"$settings"
-DREAMTREE_SETTINGS="$settings" DREAMTREE_SNAPSHOT="$out" "$app" >"$out/app.log" 2>&1 &
+MANGROVE_SETTINGS="$settings" MANGROVE_SNAPSHOT="$out" "$app" >"$out/app.log" 2>&1 &
 pid=$!
 status=0
 # A real screenshot whenever the app says a step is on screen ("<step>.ready"): the system draws the glass of
@@ -85,7 +85,7 @@ else
 fi
 cat "$out/app.log"
 ls -l "$out"
-for f in 1-changes 2-commit 3-diff 4-diff-split 5-settings-general 6-settings-appearance 7-settings-git 8-settings-integrations 9-add-account; do
+for f in 1-changes 2-commit 3-diff 4-diff-split 5-settings-general 6-settings-appearance 7-settings-git 8-settings-integrations 9-add-account 10-sign-in; do
     [ -s "$out/$f.png" ] || { echo "Missing $f.png" >&2; status=1; }
 done
 exit "$status"

@@ -1,7 +1,7 @@
 // Repository loading through the git CLI.
 //
 // git's own C implementation (commit-graph, packfile caches, ...) is the fastest reader available, so
-// DreamTree spawns it with machine-readable NUL-separated formats and parses the output while it
+// Mangrove spawns it with machine-readable NUL-separated formats and parses the output while it
 // streams. Refs, stashes, the commit log and the working-tree status are read concurrently.
 
 #include "git.h"

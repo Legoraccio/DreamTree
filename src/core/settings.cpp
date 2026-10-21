@@ -11,14 +11,22 @@ Settings& AppSettings() {
 }
 
 static std::wstring SettingsPath() {
-    const std::wstring custom = EnvVar("DREAMTREE_SETTINGS");  // separate profiles, UI tests
+    const std::wstring custom = EnvVar("MANGROVE_SETTINGS");  // separate profiles, UI tests
     if (!custom.empty()) return custom;
     return PathJoin(AppDataDir(), L"settings.ini");
 }
 
+// Mangrove was called DreamTree: the first time, its settings are read from DreamTree's folder, and the next
+// save keeps them in Mangrove's.
+static bool ReadOldSettings(std::string& raw) {
+    if (!EnvVar("MANGROVE_SETTINGS").empty()) return false;
+    const std::wstring dir = OldAppDataDir();
+    return !dir.empty() && ReadWholeFile(PathJoin(dir, L"settings.ini"), raw, 1u << 22);
+}
+
 void Settings::Load() {
     std::string raw;
-    if (!ReadWholeFile(SettingsPath(), raw, 1u << 22)) return;
+    if (!ReadWholeFile(SettingsPath(), raw, 1u << 22) && !ReadOldSettings(raw)) return;
     if (raw.compare(0, 3, "\xEF\xBB\xBF") == 0) raw.erase(0, 3);  // saved by an editor that writes a UTF-8 BOM
     const std::wstring text = Widen(raw);
     recent.clear();

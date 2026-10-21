@@ -157,16 +157,19 @@ std::wstring WriteTempFile(const std::string& bytes) {
 
 void RemoveFile(const std::wstring& path) { DeleteFileW(path.c_str()); }
 
-std::wstring AppDataDir() {
+static std::wstring RoamingDir(const wchar_t* name, bool create) {
     PWSTR p = nullptr;
     std::wstring dir;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &p))) {
-        dir = std::wstring(p) + L"\\DreamTree";
-        CreateDirectoryW(dir.c_str(), nullptr);
+        dir = std::wstring(p) + L"\\" + name;
+        if (create) CreateDirectoryW(dir.c_str(), nullptr);
     }
     if (p) CoTaskMemFree(p);
     return dir;
 }
+
+std::wstring AppDataDir() { return RoamingDir(L"Mangrove", true); }
+std::wstring OldAppDataDir() { return RoamingDir(L"DreamTree", false); }
 
 std::wstring EnvVar(const char* name) {
     const std::wstring w = Widen(name);
@@ -361,7 +364,8 @@ static std::string WinHttpErrorText(DWORD e) {
     return Narrow(s);
 }
 
-HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& headers) {
+static HttpResponse HttpRequest(const wchar_t* method, const std::string& url, const std::vector<std::string>& headers,
+                                const std::string* form) {
     HttpResponse r;
     const std::wstring wurl = Widen(url);
     URL_COMPONENTS uc{};
@@ -382,14 +386,14 @@ HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& hea
         }
     };
     Handle session, connect, request;
-    session.h = WinHttpOpen(L"DreamTree", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!session.h) session.h = WinHttpOpen(L"DreamTree", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    session.h = WinHttpOpen(L"Mangrove", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!session.h) session.h = WinHttpOpen(L"Mangrove", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (session.h) {
         WinHttpSetTimeouts(session.h, 10000, 10000, 20000, 20000);
         connect.h = WinHttpConnect(session.h, host.c_str(), uc.nPort, 0);
     }
     if (connect.h)
-        request.h = WinHttpOpenRequest(connect.h, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+        request.h = WinHttpOpenRequest(connect.h, method, path.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
     if (!request.h) {
         r.error = WinHttpErrorText(GetLastError());
         return r;
@@ -398,8 +402,11 @@ HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& hea
     WinHttpSetOption(request.h, WINHTTP_OPTION_DISABLE_FEATURE, &noRedirects, sizeof noRedirects);
     std::wstring hs;
     for (const std::string& h : headers) hs += Widen(h) + L"\r\n";
-    if (!WinHttpSendRequest(request.h, hs.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS : hs.c_str(), hs.empty() ? 0 : (DWORD)-1L,
-                            WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+    if (form) hs += L"Content-Type: application/x-www-form-urlencoded\r\n";
+    LPVOID data = form ? (LPVOID)form->data() : WINHTTP_NO_REQUEST_DATA;
+    const DWORD formSize = form ? (DWORD)form->size() : 0;
+    if (!WinHttpSendRequest(request.h, hs.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS : hs.c_str(), hs.empty() ? 0 : (DWORD)-1L, data, formSize,
+                            formSize, 0) ||
         !WinHttpReceiveResponse(request.h, nullptr)) {
         r.error = WinHttpErrorText(GetLastError());
         return r;
@@ -442,12 +449,18 @@ HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& hea
     return r;
 }
 
+HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& headers) { return HttpRequest(L"GET", url, headers, nullptr); }
+
+HttpResponse HttpPost(const std::string& url, const std::vector<std::string>& headers, const std::string& form) {
+    return HttpRequest(L"POST", url, headers, &form);
+}
+
 // ============================================================================ secrets (Windows Credential Manager)
 
-static std::wstring CredentialTarget(const std::wstring& key) { return L"DreamTree:" + key; }
+static std::wstring CredentialTarget(const std::wstring& key) { return L"Mangrove:" + key; }
 
 bool SecretSave(const std::wstring& key, const std::string& secret, const std::wstring& label) {
-    std::wstring target = CredentialTarget(key), comment = label, user = L"DreamTree";
+    std::wstring target = CredentialTarget(key), comment = label, user = L"Mangrove";
     CREDENTIALW c{};
     c.Type = CRED_TYPE_GENERIC;
     c.TargetName = target.data();

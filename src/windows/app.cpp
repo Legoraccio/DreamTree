@@ -65,9 +65,9 @@ void ThemeWindowFrame(HWND h, th::Theme theme) {
     const bool dark = th::IsDark(), contrast = th::IsHighContrast();
     const BOOL darkFrame = dark;
     DwmSetWindowAttribute(h, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkFrame, sizeof darkFrame);
-    // The DreamTree theme has its own navy border; the Windows themes leave it to Windows (accent color
+    // The Mangrove theme has its own navy border; the Windows themes leave it to Windows (accent color
     // when "Show accent color on title bars and window borders" is on).
-    const COLORREF border = theme == th::Theme::DreamTree && !contrast ? RGB(0x26, 0x36, 0x5E) : DWMWA_COLOR_DEFAULT;
+    const COLORREF border = theme == th::Theme::Mangrove && !contrast ? RGB(0x26, 0x36, 0x5E) : DWMWA_COLOR_DEFAULT;
     DwmSetWindowAttribute(h, DWMWA_BORDER_COLOR, &border, sizeof border);
     SetMenuMode(h, dark, theme == th::Theme::System || contrast);
 }
@@ -117,7 +117,7 @@ bool App::Create(HINSTANCE inst, int show) {
     wc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(1));
     wc.hIconSm = (HICON)LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
                                    GetSystemMetrics(SM_CYSMICON), 0);
-    wc.lpszClassName = L"DreamTreeWindow";
+    wc.lpszClassName = L"MangroveWindow";
     RegisterClassExW(&wc);
 
     RECT wa{};
@@ -127,7 +127,7 @@ bool App::Create(HINSTANCE inst, int show) {
     int wh = std::min((int)((wa.bottom - wa.top) * 0.88), MulDiv(1300, (int)sysDpi, 96));
     int x = wa.left + ((wa.right - wa.left) - ww) / 2, y = wa.top + ((wa.bottom - wa.top) - wh) / 2;
 
-    hwnd = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP | WS_EX_ACCEPTFILES, wc.lpszClassName, L"DreamTree", WS_OVERLAPPEDWINDOW,
+    hwnd = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP | WS_EX_ACCEPTFILES, wc.lpszClassName, L"Mangrove", WS_OVERLAPPEDWINDOW,
                            x, y, ww, wh, nullptr, nullptr, inst, nullptr);
     if (!hwnd) return false;
     dpi = GetDpiForWindow(hwnd);
@@ -147,7 +147,7 @@ bool App::Create(HINSTANCE inst, int show) {
     RECT cr{};
     GetClientRect(hwnd, &cr);
     if (!gfx.Init(hwnd, (UINT)std::max<LONG>(1, cr.right), (UINT)std::max<LONG>(1, cr.bottom))) {
-        MessageBoxW(hwnd, L"Direct2D / DirectComposition initialization failed.", L"DreamTree", MB_ICONERROR);
+        MessageBoxW(hwnd, L"Direct2D / DirectComposition initialization failed.", L"Mangrove", MB_ICONERROR);
         return false;
     }
 
@@ -194,7 +194,7 @@ bool App::Create(HINSTANCE inst, int show) {
     ShowWindow(hwnd, maximized ? SW_SHOWMAXIMIZED : show);
     UpdateWindow(hwnd);
     SetTimer(hwnd, 4, 60000, nullptr);  // relative times ("fetched 3 minutes ago") move on
-    StartSnapshots();                   // DREAMTREE_SNAPSHOT: pictures for the interface test
+    StartSnapshots();                   // MANGROVE_SNAPSHOT: pictures for the interface test
     return true;
 }
 
@@ -1711,7 +1711,7 @@ void App::LoadSettings() {
     const std::wstring themeName = s.Get(L"theme");
     theme = themeName == L"light"       ? th::Theme::Light
             : themeName == L"dark"      ? th::Theme::Dark
-            : themeName == L"dreamtree" ? th::Theme::DreamTree
+            : themeName == L"mangrove" || themeName == L"dreamtree" ? th::Theme::Mangrove  // its name before Mangrove
                                         : th::Theme::System;
     sideVisible = s.GetBool(L"sideVisible", true);
     detailVisible = s.GetBool(L"detailVisible", true);
@@ -1731,7 +1731,7 @@ void App::SaveSettings() {
     s.SetFloat(L"detail", detailW, 0);
     s.SetFloat(L"colRef", colRef, 0);
     s.diffSplit = diffSplit;
-    s.Set(L"theme", theme == th::Theme::Light ? L"light" : theme == th::Theme::Dark ? L"dark" : theme == th::Theme::DreamTree ? L"dreamtree" : L"system");
+    s.Set(L"theme", theme == th::Theme::Light ? L"light" : theme == th::Theme::Dark ? L"dark" : theme == th::Theme::Mangrove ? L"mangrove" : L"system");
     s.SetBool(L"sideVisible", sideVisible);
     s.SetBool(L"detailVisible", detailVisible);
     WINDOWPLACEMENT wp{ sizeof(wp) };

@@ -4,7 +4,7 @@
 
 static_assert(sizeof(wchar_t) == 4, "wide text is UTF-32 on macOS");
 
-NSString* const DTSettingsChangedNotification = @"DTSettingsChanged";
+NSString* const MGSettingsChangedNotification = @"MGSettingsChanged";
 
 // ---------------------------------------------------------------- text
 
@@ -172,7 +172,7 @@ static NSArray<NSString*>* DroppedFolders(id<NSDraggingInfo> info) {
     return folders;
 }
 
-@implementation DTDropView
+@implementation MGDropView
 
 - (instancetype)initWithFrame:(NSRect)frame {
     if ((self = [super initWithFrame:frame])) [self registerForDraggedTypes:@[ NSPasteboardTypeFileURL ]];

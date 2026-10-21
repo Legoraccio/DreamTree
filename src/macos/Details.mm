@@ -5,7 +5,7 @@
 
 // ---------------------------------------------------------------- file lists
 
-@interface DTFileItem : NSObject
+@interface MGFileItem : NSObject
 @property(nonatomic) int section;           // 0 a commit's files, 1 unstaged, 2 staged
 @property(nonatomic) NSInteger file;        // index in the section's files; -1 for folders and section headers
 @property(nonatomic) BOOL header;           // "Unstaged" / "Staged"
@@ -13,15 +13,15 @@
 @property(nonatomic, copy) NSString* name;  // file name, folder (tree) or section title
 @property(nonatomic, copy) NSString* dir;   // list: the file's folder, shown dimmed
 @property(nonatomic, copy) NSString* path;  // in the repository; folders: their path
-@property(nonatomic, strong) NSMutableArray<DTFileItem*>* children;
+@property(nonatomic, strong) NSMutableArray<MGFileItem*>* children;
 @end
 
-@implementation DTFileItem
+@implementation MGFileItem
 @end
 
-static void AddNodes(NSMutableArray<DTFileItem*>* out, const TreeNode& n, int section, const std::vector<FileChange>& files, NSString* prefix) {
+static void AddNodes(NSMutableArray<MGFileItem*>* out, const TreeNode& n, int section, const std::vector<FileChange>& files, NSString* prefix) {
     for (const TreeNode& c : n.children) {
-        DTFileItem* f = [[DTFileItem alloc] init];
+        MGFileItem* f = [[MGFileItem alloc] init];
         f.section = section;
         f.name = NS(c.name);
         f.dir = @"";
@@ -39,8 +39,8 @@ static void AddNodes(NSMutableArray<DTFileItem*>* out, const TreeNode& n, int se
     }
 }
 
-static NSMutableArray<DTFileItem*>* FileItems(const std::vector<FileChange>& files, int section, bool tree) {
-    NSMutableArray<DTFileItem*>* out = [NSMutableArray array];
+static NSMutableArray<MGFileItem*>* FileItems(const std::vector<FileChange>& files, int section, bool tree) {
+    NSMutableArray<MGFileItem*>* out = [NSMutableArray array];
     if (tree) {
         AddNodes(out, FileTree(files), section, files, @"");
         return out;
@@ -48,7 +48,7 @@ static NSMutableArray<DTFileItem*>* FileItems(const std::vector<FileChange>& fil
     for (size_t i = 0; i < files.size(); ++i) {
         const std::wstring& p = files[i].path;
         const size_t slash = p.find_last_of(L'/');
-        DTFileItem* f = [[DTFileItem alloc] init];
+        MGFileItem* f = [[MGFileItem alloc] init];
         f.section = section;
         f.file = (NSInteger)i;
         f.name = NS(slash == std::wstring::npos ? p : p.substr(slash + 1));
@@ -60,16 +60,16 @@ static NSMutableArray<DTFileItem*>* FileItems(const std::vector<FileChange>& fil
 }
 
 // An outline view that knows the row under the pointer: file rows show their discard button then.
-@interface DTHoverOutlineView : NSOutlineView
+@interface MGHoverOutlineView : NSOutlineView
 @property(nonatomic) NSInteger hoverRow;
 - (void)setHover:(NSInteger)row;
 @end
 
-@protocol DTHoverable
+@protocol MGHoverable
 - (void)setHovered:(BOOL)hovered;
 @end
 
-@implementation DTHoverOutlineView {
+@implementation MGHoverOutlineView {
     NSTrackingArea* _area;
 }
 
@@ -95,7 +95,7 @@ static NSMutableArray<DTFileItem*>* FileItems(const std::vector<FileChange>& fil
     for (NSInteger r : { old, row }) {
         if (r < 0 || r >= self.numberOfRows) continue;
         id v = [self viewAtColumn:0 row:r makeIfNecessary:NO];
-        if ([v conformsToProtocol:@protocol(DTHoverable)]) [(id<DTHoverable>)v setHovered:r == _hoverRow];
+        if ([v conformsToProtocol:@protocol(MGHoverable)]) [(id<MGHoverable>)v setHovered:r == _hoverRow];
     }
 }
 
@@ -118,7 +118,7 @@ static NSMutableArray<DTFileItem*>* FileItems(const std::vector<FileChange>& fil
 
 // A changed file: status letter, folder and name, lines changed, and the stage / discard buttons; or a
 // section header ("Unstaged 3", Stage All), or a folder of the tree.
-@interface DTFileCell : NSTableCellView <DTHoverable>
+@interface MGFileCell : NSTableCellView <MGHoverable>
 @property(nonatomic, strong) NSTextField* letter;
 @property(nonatomic, strong) NSTextField* name;
 @property(nonatomic, strong) NSTextField* dir;
@@ -129,7 +129,7 @@ static NSMutableArray<DTFileItem*>* FileItems(const std::vector<FileChange>& fil
 @property(nonatomic) BOOL hovered;
 @end
 
-@implementation DTFileCell
+@implementation MGFileCell
 
 - (instancetype)initWithFrame:(NSRect)frame {
     if (!(self = [super initWithFrame:frame])) return nil;
@@ -206,10 +206,10 @@ static NSMutableArray<DTFileItem*>* FileItems(const std::vector<FileChange>& fil
 @end
 
 // A label that lets clicks through to what is under it (the placeholder of a text view).
-@interface DTPassThroughLabel : NSTextField
+@interface MGPassThroughLabel : NSTextField
 @end
 
-@implementation DTPassThroughLabel
+@implementation MGPassThroughLabel
 
 - (NSView*)hitTest:(NSPoint)point {
     return nil;
@@ -218,11 +218,11 @@ static NSMutableArray<DTFileItem*>* FileItems(const std::vector<FileChange>& fil
 @end
 
 // The author's initials on their color.
-@interface DTAvatarView : NSView
+@interface MGAvatarView : NSView
 - (void)setAuthor:(const Author&)author;
 @end
 
-@implementation DTAvatarView {
+@implementation MGAvatarView {
     Author _author;
 }
 
@@ -239,8 +239,8 @@ static NSMutableArray<DTFileItem*>* FileItems(const std::vector<FileChange>& fil
 
 // ---------------------------------------------------------------- controller
 
-@implementation DTDetailsController {
-    __weak DTRepoWindowController* _owner;
+@implementation MGDetailsController {
+    __weak MGRepoWindowController* _owner;
     BOOL _tree;  // file lists as a tree of folders
     BOOL _syncing;
     BOOL _reloading;
@@ -256,17 +256,17 @@ static NSMutableArray<DTFileItem*>* FileItems(const std::vector<FileChange>& fil
     NSScrollView* _bodyScroll;
     NSTextView* _body;
     NSLayoutConstraint* _bodyHeight;
-    DTAvatarView* _avatar;
+    MGAvatarView* _avatar;
     NSTextField* _authorName;
     NSStackView* _dateLine;
     NSTextField* _committer;
     NSButton* _act[3];
     NSTextField* _filesStats;
     NSButton* _treeButton;
-    DTHoverOutlineView* _commitList;
+    MGHoverOutlineView* _commitList;
     NSScrollView* _commitListScroll;
     NSTextField* _filesNote;  // loading, errors, no files
-    NSArray<DTFileItem*>* _commitItems;
+    NSArray<MGFileItem*>* _commitItems;
     std::weak_ptr<CommitDetails> _shownDetails;
     BOOL _commitTree;  // what the lists show
     BOOL _wipTree;
@@ -275,8 +275,8 @@ static NSMutableArray<DTFileItem*>* FileItems(const std::vector<FileChange>& fil
     NSView* _wipPane;
     NSTextField* _branch;
     NSTextField* _wipCount;
-    DTHoverOutlineView* _wipList;
-    NSArray<DTFileItem*>* _wipItems;
+    MGHoverOutlineView* _wipList;
+    NSArray<MGFileItem*>* _wipItems;
     std::weak_ptr<WorkStatus> _shownStatus;
     NSMutableSet<NSString*>* _collapsed;  // sections and folders closed by the user
     NSButton* _amend;
@@ -288,7 +288,7 @@ static NSMutableArray<DTFileItem*>* FileItems(const std::vector<FileChange>& fil
     NSString* _amendPrefill;  // the message put in when amend was turned on
 }
 
-- (instancetype)initWithOwner:(DTRepoWindowController*)owner {
+- (instancetype)initWithOwner:(MGRepoWindowController*)owner {
     if ((self = [super initWithNibName:nil bundle:nil])) {
         _owner = owner;
         _collapsed = [NSMutableSet set];
@@ -306,8 +306,8 @@ static NSScrollView* Scrolling(NSView* doc) {
     return s;
 }
 
-- (DTHoverOutlineView*)makeFileList {
-    DTHoverOutlineView* ov = [[DTHoverOutlineView alloc] initWithFrame:NSZeroRect];
+- (MGHoverOutlineView*)makeFileList {
+    MGHoverOutlineView* ov = [[MGHoverOutlineView alloc] initWithFrame:NSZeroRect];
     NSTableColumn* col = [[NSTableColumn alloc] initWithIdentifier:@"file"];
     col.resizingMask = NSTableColumnAutoresizingMask;
     [ov addTableColumn:col];
@@ -391,7 +391,7 @@ static NSScrollView* Scrolling(NSView* doc) {
     _bodyHeight = [_bodyScroll.heightAnchor constraintEqualToConstant:40];
     _bodyHeight.active = YES;
 
-    _avatar = [[DTAvatarView alloc] initWithFrame:NSMakeRect(0, 0, 30, 30)];
+    _avatar = [[MGAvatarView alloc] initWithFrame:NSMakeRect(0, 0, 30, 30)];
     [_avatar.widthAnchor constraintEqualToConstant:30].active = YES;
     [_avatar.heightAnchor constraintEqualToConstant:30].active = YES;
     _authorName = MakeLabel(@"", [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold], NSColor.labelColor);
@@ -519,7 +519,7 @@ static NSScrollView* Scrolling(NSView* doc) {
     _bodyField.automaticTextReplacementEnabled = NO;
     _bodyField.textContainerInset = NSMakeSize(2, 4);
     _bodyField.delegate = self;
-    _bodyPlaceholder = [DTPassThroughLabel labelWithString:@"Description"];
+    _bodyPlaceholder = [MGPassThroughLabel labelWithString:@"Description"];
     _bodyPlaceholder.font = [NSFont systemFontOfSize:13];
     _bodyPlaceholder.textColor = NSColor.placeholderTextColor;
     _bodyPlaceholder.translatesAutoresizingMaskIntoConstraints = NO;
@@ -691,10 +691,10 @@ static NSScrollView* Scrolling(NSView* doc) {
     if (_shownStatus.lock() == st && _wipTree == _tree && _wipItems.count) return;
     _shownStatus = st;
     _wipTree = _tree;
-    NSMutableArray<DTFileItem*>* roots = [NSMutableArray array];
+    NSMutableArray<MGFileItem*>* roots = [NSMutableArray array];
     for (int section = 1; section <= 2; ++section) {
         const std::vector<FileChange>& files = section == 1 ? st->unstaged : st->staged;
-        DTFileItem* h = [[DTFileItem alloc] init];
+        MGFileItem* h = [[MGFileItem alloc] init];
         h.header = YES;
         h.section = section;
         h.file = -1;
@@ -709,32 +709,32 @@ static NSScrollView* Scrolling(NSView* doc) {
 }
 
 // Reloads a list and opens what the user did not close.
-- (void)reloadList:(DTHoverOutlineView*)ov {
+- (void)reloadList:(MGHoverOutlineView*)ov {
     _reloading = YES;
     [ov reloadData];
     [ov setHover:-1];
-    NSArray<DTFileItem*>* roots = ov == _wipList ? _wipItems : _commitItems;
+    NSArray<MGFileItem*>* roots = ov == _wipList ? _wipItems : _commitItems;
     [self expand:roots inList:ov];
     _reloading = NO;
     [self syncFileSelection];
 }
 
-- (NSString*)keyOf:(DTFileItem*)it {
+- (NSString*)keyOf:(MGFileItem*)it {
     return [NSString stringWithFormat:@"%d:%@:%@", it.section, it.header ? @"#" : @"", it.path];
 }
 
-- (void)expand:(NSArray<DTFileItem*>*)items inList:(NSOutlineView*)ov {
-    for (DTFileItem* it in items) {
+- (void)expand:(NSArray<MGFileItem*>*)items inList:(NSOutlineView*)ov {
+    for (MGFileItem* it in items) {
         if (!it.children.count || [_collapsed containsObject:[self keyOf:it]]) continue;
         [ov expandItem:it];
         [self expand:it.children inList:ov];
     }
 }
 
-- (DTFileItem*)itemForSection:(int)section path:(const std::wstring&)path among:(NSArray<DTFileItem*>*)items {
-    for (DTFileItem* it in items) {
+- (MGFileItem*)itemForSection:(int)section path:(const std::wstring&)path among:(NSArray<MGFileItem*>*)items {
+    for (MGFileItem* it in items) {
         if (it.file >= 0 && it.section == section && WS(it.path) == path) return it;
-        if (DTFileItem* found = [self itemForSection:section path:path among:it.children]) return found;
+        if (MGFileItem* found = [self itemForSection:section path:path among:it.children]) return found;
     }
     return nil;
 }
@@ -742,9 +742,9 @@ static NSScrollView* Scrolling(NSView* doc) {
 // The file shown in the diff is the selected one.
 - (void)syncFileSelection {
     RepoSession* s = _owner.session;
-    for (DTHoverOutlineView* ov in @[ _commitList, _wipList ]) {
-        NSArray<DTFileItem*>* roots = ov == _wipList ? _wipItems : _commitItems;
-        DTFileItem* want = s && s->diff.open ? [self itemForSection:s->diff.req.section path:s->diff.req.path among:roots] : nil;
+    for (MGHoverOutlineView* ov in @[ _commitList, _wipList ]) {
+        NSArray<MGFileItem*>* roots = ov == _wipList ? _wipItems : _commitItems;
+        MGFileItem* want = s && s->diff.open ? [self itemForSection:s->diff.req.section path:s->diff.req.path among:roots] : nil;
         const NSInteger row = want ? [ov rowForItem:want] : -1;
         if (row == ov.selectedRow) continue;
         _syncing = YES;
@@ -910,27 +910,27 @@ static NSScrollView* Scrolling(NSView* doc) {
 
 // ---- file lists
 
-- (NSArray<DTFileItem*>*)rootsOf:(NSOutlineView*)ov {
+- (NSArray<MGFileItem*>*)rootsOf:(NSOutlineView*)ov {
     return ov == _wipList ? _wipItems : _commitItems;
 }
 
 - (NSInteger)outlineView:(NSOutlineView*)ov numberOfChildrenOfItem:(id)item {
-    return item ? (NSInteger)((DTFileItem*)item).children.count : (NSInteger)[self rootsOf:ov].count;
+    return item ? (NSInteger)((MGFileItem*)item).children.count : (NSInteger)[self rootsOf:ov].count;
 }
 
 - (id)outlineView:(NSOutlineView*)ov child:(NSInteger)index ofItem:(id)item {
-    return item ? ((DTFileItem*)item).children[(NSUInteger)index] : [self rootsOf:ov][(NSUInteger)index];
+    return item ? ((MGFileItem*)item).children[(NSUInteger)index] : [self rootsOf:ov][(NSUInteger)index];
 }
 
 - (BOOL)outlineView:(NSOutlineView*)ov isItemExpandable:(id)item {
-    return ((DTFileItem*)item).children.count > 0;
+    return ((MGFileItem*)item).children.count > 0;
 }
 
 - (BOOL)outlineView:(NSOutlineView*)ov shouldSelectItem:(id)item {
-    return ((DTFileItem*)item).file >= 0;
+    return ((MGFileItem*)item).file >= 0;
 }
 
-- (const FileChange*)changeOf:(DTFileItem*)it {
+- (const FileChange*)changeOf:(MGFileItem*)it {
     RepoSession* s = _owner.session;
     if (!s || it.file < 0) return nullptr;
     const std::vector<FileChange>* files = nullptr;
@@ -940,10 +940,10 @@ static NSScrollView* Scrolling(NSView* doc) {
 }
 
 - (NSView*)outlineView:(NSOutlineView*)ov viewForTableColumn:(NSTableColumn*)col item:(id)item {
-    DTFileItem* it = item;
-    DTFileCell* c = [ov makeViewWithIdentifier:@"file" owner:self];
+    MGFileItem* it = item;
+    MGFileCell* c = [ov makeViewWithIdentifier:@"file" owner:self];
     if (!c) {
-        c = [[DTFileCell alloc] initWithFrame:NSZeroRect];
+        c = [[MGFileCell alloc] initWithFrame:NSZeroRect];
         c.identifier = @"file";
         c.action.target = self;
         c.action.action = @selector(rowAction:);
@@ -985,7 +985,7 @@ static NSScrollView* Scrolling(NSView* doc) {
         c.canDiscard = it.section == 1 && status != L'U';
         c.toolTip = f && !f->oldPath.empty() ? [NSString stringWithFormat:@"%@ → %@", NS(f->oldPath), NS(f->path)] : it.path;
     }
-    c.hovered = [ov isKindOfClass:DTHoverOutlineView.class] && [ov rowForItem:it] == ((DTHoverOutlineView*)ov).hoverRow;
+    c.hovered = [ov isKindOfClass:MGHoverOutlineView.class] && [ov rowForItem:it] == ((MGHoverOutlineView*)ov).hoverRow;
     c.needsLayout = YES;
     return c;
 }
@@ -993,7 +993,7 @@ static NSScrollView* Scrolling(NSView* doc) {
 - (void)outlineViewSelectionDidChange:(NSNotification*)note {
     if (_syncing || _reloading) return;
     NSOutlineView* ov = note.object;
-    DTFileItem* it = [ov itemAtRow:ov.selectedRow];
+    MGFileItem* it = [ov itemAtRow:ov.selectedRow];
     if (it && it.file >= 0) [_owner openDiff:it.section path:WS(it.path)];
 }
 
@@ -1005,7 +1005,7 @@ static NSScrollView* Scrolling(NSView* doc) {
     if (!_reloading) [_collapsed addObject:[self keyOf:note.userInfo[@"NSObject"]]];
 }
 
-- (DTFileItem*)itemForButton:(NSButton*)b {
+- (MGFileItem*)itemForButton:(NSButton*)b {
     for (NSOutlineView* ov in @[ _wipList, _commitList ]) {
         const NSInteger row = [ov rowForView:b];
         if (row >= 0) return [ov itemAtRow:row];
@@ -1014,7 +1014,7 @@ static NSScrollView* Scrolling(NSView* doc) {
 }
 
 // The paths a row stands for: a file (and the old name of a rename), a folder, or everything (headers).
-- (std::vector<std::wstring>)pathsOf:(DTFileItem*)it {
+- (std::vector<std::wstring>)pathsOf:(MGFileItem*)it {
     std::vector<std::wstring> paths;
     if (it.header) return paths;
     paths.push_back(WS(it.path));
@@ -1023,12 +1023,12 @@ static NSScrollView* Scrolling(NSView* doc) {
 }
 
 - (void)rowAction:(NSButton*)b {
-    DTFileItem* it = [self itemForButton:b];
+    MGFileItem* it = [self itemForButton:b];
     if (it && it.section > 0) [_owner stagePaths:[self pathsOf:it] stage:it.section == 1];
 }
 
 - (void)rowDiscard:(NSButton*)b {
-    DTFileItem* it = [self itemForButton:b];
+    MGFileItem* it = [self itemForButton:b];
     if (const FileChange* f = it ? [self changeOf:it] : nullptr) [_owner discardFile:*f];
 }
 
@@ -1038,7 +1038,7 @@ static NSScrollView* Scrolling(NSView* doc) {
     NSOutlineView* ov = nil;
     for (NSOutlineView* x in @[ _wipList, _commitList ])
         if (x.menu == menu) ov = x;
-    DTFileItem* it = ov ? [ov itemAtRow:ov.clickedRow] : nil;
+    MGFileItem* it = ov ? [ov itemAtRow:ov.clickedRow] : nil;
     if (!it) return;
     auto add = [&](NSString* title, SEL action) {
         NSMenuItem* i = [menu addItemWithTitle:title action:action keyEquivalent:@""];
@@ -1060,7 +1060,7 @@ static NSScrollView* Scrolling(NSView* doc) {
 }
 
 - (void)menuStage:(NSMenuItem*)i {
-    DTFileItem* it = i.representedObject;
+    MGFileItem* it = i.representedObject;
     [_owner stagePaths:[self pathsOf:it] stage:it.section == 1];
 }
 
@@ -1069,11 +1069,11 @@ static NSScrollView* Scrolling(NSView* doc) {
 }
 
 - (void)menuCopyPath:(NSMenuItem*)i {
-    [_owner copyText:((DTFileItem*)i.representedObject).path];
+    [_owner copyText:((MGFileItem*)i.representedObject).path];
 }
 
 - (void)menuReveal:(NSMenuItem*)i {
-    [_owner revealFile:WS(((DTFileItem*)i.representedObject).path)];
+    [_owner revealFile:WS(((MGFileItem*)i.representedObject).path)];
 }
 
 @end

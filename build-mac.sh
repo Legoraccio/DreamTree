@@ -1,10 +1,10 @@
 #!/bin/bash
-# DreamTree build script for macOS (the Windows app is built by build.ps1).
+# Mangrove build script for macOS (the Windows app is built by build.ps1).
 # Compiles the shared core (src/core) and the AppKit interface (src/macos) with the Xcode command line tools
 # into an app bundle for Apple silicon and Intel Macs (macOS 12 or later), signed ad hoc.
 #
-#   ./build-mac.sh            release build -> bin/DreamTree.app
-#   ./build-mac.sh --debug    debug build   -> bin/DreamTree-debug.app
+#   ./build-mac.sh            release build -> bin/Mangrove.app
+#   ./build-mac.sh --debug    debug build   -> bin/Mangrove-debug.app
 #   ./build-mac.sh --native   only for this Mac's processor (faster)
 #   ./build-mac.sh --run      build and open
 set -euo pipefail
@@ -26,8 +26,8 @@ command -v xcrun >/dev/null 2>&1 || { echo "The Xcode command line tools are mis
 cxx="$(xcrun --find clang++)"
 sdk="$(xcrun --sdk macosx --show-sdk-path)"
 
-name=DreamTree
-[ "$config" = debug ] && name=DreamTree-debug
+name=Mangrove
+[ "$config" = debug ] && name=Mangrove-debug
 obj="$root/build/mac-$config"
 app="$root/bin/$name.app"
 mkdir -p "$obj" "$root/bin"
@@ -60,7 +60,7 @@ for p in "${pids[@]}"; do wait "$p" || failed=1; done
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 "$cxx" "${flags[@]}" "${objects[@]}" -framework Cocoa -framework CoreServices -framework CoreFoundation -framework Security -lcurl \
-    -o "$app/Contents/MacOS/DreamTree"
+    -o "$app/Contents/MacOS/Mangrove"
 cp "$root/src/macos/Info.plist" "$app/Contents/Info.plist"
 printf 'APPL????' >"$app/Contents/PkgInfo"
 

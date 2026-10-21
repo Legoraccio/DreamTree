@@ -34,7 +34,7 @@ if ($LASTEXITCODE -ne 0) { throw "patchtest build failed" }
 $ErrorActionPreference = 'Stop'
 
 # ---------------------------------------------------------------- throwaway repository
-$repo = Join-Path $env:TEMP 'dreamtree-patchtest'
+$repo = Join-Path $env:TEMP 'mangrove-patchtest'
 if (Test-Path $repo) { Remove-Item -Recurse -Force $repo }
 New-Item -ItemType Directory $repo | Out-Null
 function Invoke-RepoGit { & git.exe -C $repo @args 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0) { throw "git $args failed" } }

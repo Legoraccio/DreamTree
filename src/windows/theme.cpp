@@ -1,4 +1,4 @@
-// Theme palettes: DreamTree (navy and gold) and the Windows themes (light or dark, the user's accent color,
+// Theme palettes: Mangrove (navy and gold) and the Windows themes (light or dark, the user's accent color,
 // contrast themes), with the Windows settings they are built from.
 
 #include "theme.h"
@@ -64,7 +64,7 @@ bool AccentFromRegistry(AccentShades& s) {
     return true;
 }
 
-// Shades made from one color, when Windows can't be asked (and for DREAMTREE_ACCENT, used by UI tests).
+// Shades made from one color, when Windows can't be asked (and for MANGROVE_ACCENT, used by UI tests).
 AccentShades ShadesOf(Color base) {
     return { Mix(base, White, 0.62f), Mix(base, White, 0.42f), Mix(base, White, 0.22f), base,
              Mix(base, Black, 0.24f), Mix(base, Black, 0.44f), Mix(base, Black, 0.64f) };
@@ -72,7 +72,7 @@ AccentShades ShadesOf(Color base) {
 
 AccentShades ReadAccent() {
     wchar_t env[16];
-    if (GetEnvironmentVariableW(L"DREAMTREE_ACCENT", env, 16) == 6) return ShadesOf(C(wcstoul(env, nullptr, 16)));
+    if (GetEnvironmentVariableW(L"MANGROVE_ACCENT", env, 16) == 6) return ShadesOf(C(wcstoul(env, nullptr, 16)));
     AccentShades s;
     if (AccentFromUISettings(s) || AccentFromRegistry(s)) return s;
     return { C(0xA6D8FF), C(0x76B9ED), C(0x429CE3), C(0x0078D4), C(0x005A9E), C(0x004275), C(0x002642) };  // Windows' default blue
@@ -88,7 +88,7 @@ bool SystemAppsDark() {
 }
 
 bool SystemHighContrast() {
-    if (GetEnvironmentVariableW(L"DREAMTREE_CONTRAST", nullptr, 0) > 0) return true;  // UI tests
+    if (GetEnvironmentVariableW(L"MANGROVE_CONTRAST", nullptr, 0) > 0) return true;  // UI tests
     HIGHCONTRASTW hc{ sizeof hc };
     return SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof hc, &hc, 0) && (hc.dwFlags & HCF_HIGHCONTRASTON);
 }
@@ -99,7 +99,7 @@ float Luminance(const Color& c) {
 }
 
 // Status colors tuned for dark or for light surfaces: the Windows themes use the WinUI caution, success,
-// critical and attention colors, the DreamTree theme keeps its own.
+// critical and attention colors, the Mangrove theme keeps its own.
 void StatusColors(bool dark, bool fluent) {
     if (dark && !fluent) {
         Modified = C(0xE8A33D);
@@ -138,7 +138,7 @@ void LaneColors(bool dark, const Color& first) {
 }
 
 // The original look: deep navy surfaces over Mica, gold accent.
-void LoadDreamTree() {
+void LoadMangrove() {
     g_dark = true;
     TitleBg = C(0x0C1834, 0.74f);
     ToolbarBg = C(0x0F1A33, 0.94f);
@@ -374,7 +374,7 @@ void LoadContrast() {
 void Apply(Theme t) {
     g_contrast = SystemHighContrast();
     if (g_contrast) LoadContrast();
-    else if (t == Theme::DreamTree) LoadDreamTree();
+    else if (t == Theme::Mangrove) LoadMangrove();
     else LoadWindows(t == Theme::System ? SystemAppsDark() : t == Theme::Dark, ReadAccent());
 }
 

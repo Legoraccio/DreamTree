@@ -1,12 +1,12 @@
 # Generates the app icons, a gold commit-graph tree on a deep navy tile:
-#   src\windows\dreamtree.ico   PNG-compressed multi-size icon for Windows
+#   src\windows\mangrove.ico   PNG-compressed multi-size icon for Windows
 #   src\macos\AppIcon.png       1024 x 1024 image for macOS (build-mac.sh makes the .icns from it), with the
 #                               margins and corner radius of macOS app icons
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
 $root = Join-Path $PSScriptRoot '..'
-$ico = Join-Path $root 'src\windows\dreamtree.ico'
+$ico = Join-Path $root 'src\windows\mangrove.ico'
 $mac = Join-Path $root 'src\macos\AppIcon.png'
 $sizes = 16, 20, 24, 32, 40, 48, 64, 128, 256
 

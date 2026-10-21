@@ -126,7 +126,7 @@ void TextBoxFrame(Gfx& gfx, const RectF& r, bool focused, bool error = false);
 void DrawEdit(Gfx& gfx, TextEdit& e, const RectF& area, F font, std::wstring_view placeholder, bool focused, bool masked = false);
 void DrawDialog(Gfx& gfx, const DialogState& dialog, int hotButton, std::vector<RectF>& buttons);
 
-// The frame of a top-level window (dark or light, the DreamTree border) and its menus, by the palette in use.
+// The frame of a top-level window (dark or light, the Mangrove border) and its menus, by the palette in use.
 void ThemeWindowFrame(HWND h, th::Theme theme);
 
 // ---- the Settings window (settingswindow.cpp): General, Appearance, Git and Integrations (accounts)
@@ -136,7 +136,7 @@ void RefreshSettings(bool theme);  // repaint it after a change made elsewhere (
 HWND SettingsWindowHandle();       // null while it is closed
 void SettingsForSnapshot(int state);
 
-// ---- pictures of the windows for the interface smoke test (snapshots.cpp, DREAMTREE_SNAPSHOT)
+// ---- pictures of the windows for the interface smoke test (snapshots.cpp, MANGROVE_SNAPSHOT)
 void StartSnapshots();
 bool SnapshotTimer(UINT_PTR id);  // true when the timer was the snapshots'
 

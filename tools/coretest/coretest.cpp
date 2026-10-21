@@ -64,7 +64,7 @@ static void TestText() {
     }
 
     CHECK(PathJoin(Native(L"/repo"), L"src/app.cpp") == Native(L"/repo/src/app.cpp"));
-    CHECK(BaseName(Native(L"/work/dream-tree")) == L"dream-tree");
+    CHECK(BaseName(Native(L"/work/mangrove-app")) == L"mangrove-app");
     CHECK(NormalizePath(Native(L"/work/repo/")) == Native(L"/work/repo"));
 }
 
@@ -107,9 +107,9 @@ static void TestTexts() {
 static void TestSettings(const std::filesystem::path& dir) {
     const std::wstring file = (dir / L"settings.ini").wstring();
 #ifdef _WIN32
-    _wputenv_s(L"DREAMTREE_SETTINGS", file.c_str());
+    _wputenv_s(L"MANGROVE_SETTINGS", file.c_str());
 #else
-    setenv("DREAMTREE_SETTINGS", Narrow(file).c_str(), 1);
+    setenv("MANGROVE_SETTINGS", Narrow(file).c_str(), 1);
 #endif
     Settings a;
     a.pullMode = 2;
@@ -145,6 +145,26 @@ static void TestAccounts(const std::filesystem::path& dir) {
     const TokenCheck bad = CheckToken(Forge::GitHub, L"http://github.com", "x");
     CHECK(!bad.ok && !bad.error.empty());
 
+    // Signing in with the browser: the answers of the device flow (RFC 8628, as GitHub sends them).
+    CHECK(!BrowserSignInAvailable(Forge::GitLab, L"https://gitlab.com") && !BrowserSignInAvailable(Forge::GitHub, L"https://github.example.com"));
+    const DeviceCode code = ParseDeviceCode(200, R"({"device_code":"3584d83530557fdd1f46af8289938c8ef79f9dc5","user_code":"WDJB-MJHT",
+        "verification_uri":"https:\/\/github.com\/login\/device","expires_in":900,"interval":5})");
+    CHECK(code.error.empty() && code.deviceCode == "3584d83530557fdd1f46af8289938c8ef79f9dc5" && code.userCode == L"WDJB-MJHT" &&
+          code.verifyUrl == L"https://github.com/login/device" && code.expiresIn == 900 && code.interval == 5);
+    CHECK(!ParseDeviceCode(200, R"({"error":"device_flow_disabled","error_description":"Device Flow must be explicitly enabled"})").error.empty());
+    CHECK(!ParseDeviceCode(404, "Not Found").error.empty());
+    CHECK(!ParseDeviceCode(200, "{}").error.empty());
+    const DevicePoll granted = ParseDevicePoll(200, R"({"access_token":"gho_16C7e42F292c6912E7710c838347Ae178B4a","token_type":"bearer","scope":"repo,workflow,read:user"})");
+    CHECK(granted.state == DeviceState::Granted && granted.token == "gho_16C7e42F292c6912E7710c838347Ae178B4a");
+    CHECK(ParseDevicePoll(200, R"({"error":"authorization_pending","error_description":"..."})").state == DeviceState::Pending);
+    const DevicePoll slow = ParseDevicePoll(200, R"({"error":"slow_down","error_description":"Too many requests.","interval":10})");
+    CHECK(slow.state == DeviceState::SlowDown && slow.interval == 10);
+    CHECK(ParseDevicePoll(400, R"({"error":"access_denied"})").state == DeviceState::Denied);
+    CHECK(ParseDevicePoll(400, R"({"error":"expired_token"})").state == DeviceState::Expired);
+    const DevicePoll failed = ParseDevicePoll(200, R"({"error":"incorrect_device_code"})");
+    CHECK(failed.state == DeviceState::Failed && !failed.error.empty());
+    CHECK(ParseDevicePoll(502, "<html>Bad gateway</html>").state == DeviceState::Failed);
+
     // The account list lives in the settings, the tokens don't.
     Settings& s = AppSettings();
     const std::vector<std::wstring> before = s.accounts;
@@ -171,7 +191,7 @@ static void TestAccounts(const std::filesystem::path& dir) {
 #ifdef _WIN32  // the credential store (the keychain needs a logged-in user, which CI on macOS may not have)
     const Account a{ Forge::Gitea, L"https://git.example.com", L"tester", L"" };
     const std::wstring key = L"coretest:" + std::to_wstring(UnixNow());
-    CHECK(SecretSave(key, "s3cret", L"DreamTree core test"));
+    CHECK(SecretSave(key, "s3cret", L"Mangrove core test"));
     std::string got;
     CHECK(SecretLoad(key, got) && got == "s3cret");
     SecretDelete(key);
@@ -267,7 +287,7 @@ static int Run() {
     TestTrees();
     TestTexts();
     std::error_code ec;
-    const std::filesystem::path dir = std::filesystem::temp_directory_path(ec) / ("dreamtree-coretest-" + std::to_string(UnixNow()));
+    const std::filesystem::path dir = std::filesystem::temp_directory_path(ec) / ("mangrove-coretest-" + std::to_string(UnixNow()));
     std::filesystem::create_directories(dir, ec);
     TestSettings(dir);
     TestAccounts(dir);

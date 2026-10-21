@@ -1,4 +1,4 @@
-# Builds DreamTree on macOS and on Windows and runs the tests of the shared core on both.
+# Builds Mangrove on macOS and on Windows and runs the tests of the shared core on both.
 name: Build
 
 on:
@@ -25,11 +25,11 @@ jobs:
       - name: Patch tests
         run: ./tools/patchtest/run.sh 60
       - name: Package
-        run: ditto -c -k --keepParent bin/DreamTree.app bin/DreamTree-macOS.zip
+        run: ditto -c -k --keepParent bin/Mangrove.app bin/Mangrove-macOS.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: DreamTree-macOS
-          path: bin/DreamTree-macOS.zip
+          name: Mangrove-macOS
+          path: bin/Mangrove-macOS.zip
       - name: Interface smoke test (window snapshots)
         run: ./tools/uitest/mac-snapshots.sh build/snapshots
       - uses: actions/upload-artifact@v4
@@ -54,8 +54,8 @@ jobs:
         run: ./tools/patchtest/run.ps1 -Cases 60
       - uses: actions/upload-artifact@v4
         with:
-          name: DreamTree-Windows
-          path: bin/DreamTree.exe
+          name: Mangrove-Windows
+          path: bin/Mangrove.exe
       - name: Interface smoke test (window snapshots)
         shell: powershell
         run: ./tools/uitest/win-snapshots.ps1 build/snapshots

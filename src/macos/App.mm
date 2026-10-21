@@ -3,16 +3,16 @@
 
 #import "MacUI.h"
 
-static DTAppDelegate* g_app;  // NSApplication keeps its delegate weakly
+static MGAppDelegate* g_app;  // NSApplication keeps its delegate weakly
 
-DTAppDelegate* App() { return g_app; }
+MGAppDelegate* App() { return g_app; }
 
 int main(int argc, const char* argv[]) {
     (void)argc;
     (void)argv;
     @autoreleasepool {
         NSApplication* app = [NSApplication sharedApplication];
-        g_app = [[DTAppDelegate alloc] init];
+        g_app = [[MGAppDelegate alloc] init];
         app.delegate = g_app;
         [app setActivationPolicy:NSApplicationActivationPolicyRegular];
         [app run];
@@ -40,8 +40,8 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
 
 // ---------------------------------------------------------------- the application
 
-@implementation DTAppDelegate {
-    NSMutableArray<DTRepoWindowController*>* _windows;
+@implementation MGAppDelegate {
+    NSMutableArray<MGRepoWindowController*>* _windows;
     NSMenu* _recent;
 }
 
@@ -60,7 +60,7 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
 - (void)applicationDidFinishLaunching:(NSNotification*)note {
     std::thread([] { GitVersion(); }).detach();  // the first git call is the slow one
     [self restoreTabs];
-    if (!EnvVar("DREAMTREE_SNAPSHOT").empty()) [self snapshotStep:0 tries:0];
+    if (!EnvVar("MANGROVE_SNAPSHOT").empty()) [self snapshotStep:0 tries:0];
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)app {
@@ -81,7 +81,7 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
 }
 
 - (void)application:(NSApplication*)app openURLs:(NSArray<NSURL*>*)urls {
-    DTRepoWindowController* origin = [self keyController];
+    MGRepoWindowController* origin = [self keyController];
     for (NSURL* u in urls) {
         NSNumber* dir = nil;
         [u getResourceValue:&dir forKey:NSURLIsDirectoryKey error:nil];
@@ -89,18 +89,18 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
     }
 }
 
-// The repositories open when DreamTree quit, as tabs of one window.
+// The repositories open when Mangrove quit, as tabs of one window.
 - (void)restoreTabs {
     // A copy: a window that becomes key saves the settings, which rewrites the list.
     const std::vector<std::wstring> tabs = AppSettings().restoreTabs ? AppSettings().tabs : std::vector<std::wstring>();
     const int activeTab = AppSettings().activeTab;
-    DTRepoWindowController* opened = _windows.lastObject;  // a folder opened at launch
+    MGRepoWindowController* opened = _windows.lastObject;  // a folder opened at launch
     NSWindow* anchor = opened.window;
-    DTRepoWindowController* active = nil;
+    MGRepoWindowController* active = nil;
     for (size_t i = 0; i < tabs.size(); ++i) {
         NSString* path = NS(tabs[i]);
         if (!DirExists(tabs[i]) || [self controllerFor:path]) continue;
-        DTRepoWindowController* c = [self newController:path];
+        MGRepoWindowController* c = [self newController:path];
         if (anchor) [anchor.tabGroup addWindow:c.window];
         else {
             [c showWindow:nil];
@@ -109,38 +109,38 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
         if ((int)i == activeTab) active = c;
     }
     if (!anchor) {
-        DTRepoWindowController* c = [self newController:nil];
+        MGRepoWindowController* c = [self newController:nil];
         [c showWindow:nil];
         active = c;
     }
-    DTRepoWindowController* front = opened ? opened : active;
+    MGRepoWindowController* front = opened ? opened : active;
     if (front) [front.window makeKeyAndOrderFront:nil];
 }
 
-- (DTRepoWindowController*)newController:(NSString*)path {
-    DTRepoWindowController* c = [[DTRepoWindowController alloc] initWithPath:path];
+- (MGRepoWindowController*)newController:(NSString*)path {
+    MGRepoWindowController* c = [[MGRepoWindowController alloc] initWithPath:path];
     [_windows addObject:c];
     return c;
 }
 
-- (DTRepoWindowController*)keyController {
+- (MGRepoWindowController*)keyController {
     id c = NSApp.keyWindow.windowController;
-    if (![c isKindOfClass:DTRepoWindowController.class]) c = NSApp.mainWindow.windowController;
-    return [c isKindOfClass:DTRepoWindowController.class] ? c : nil;
+    if (![c isKindOfClass:MGRepoWindowController.class]) c = NSApp.mainWindow.windowController;
+    return [c isKindOfClass:MGRepoWindowController.class] ? c : nil;
 }
 
-- (DTRepoWindowController*)controllerFor:(NSString*)path {
+- (MGRepoWindowController*)controllerFor:(NSString*)path {
     const std::wstring p = NormalizePath(WS(path.stringByStandardizingPath));
-    for (DTRepoWindowController* c in _windows) {
+    for (MGRepoWindowController* c in _windows) {
         const RepoSession* s = c.session;
         if (s && (s->path == p || (s->data && s->data->root == p))) return c;
     }
     return nil;
 }
 
-- (void)openRepository:(NSString*)path from:(DTRepoWindowController*)origin {
+- (void)openRepository:(NSString*)path from:(MGRepoWindowController*)origin {
     path = path.stringByStandardizingPath;
-    if (DTRepoWindowController* open = [self controllerFor:path]) {
+    if (MGRepoWindowController* open = [self controllerFor:path]) {
         [open.window makeKeyAndOrderFront:nil];
         return;
     }
@@ -149,12 +149,12 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
         [origin.window makeKeyAndOrderFront:nil];
         return;
     }
-    DTRepoWindowController* c = [self newController:path];
+    MGRepoWindowController* c = [self newController:path];
     if (origin.window.visible) [origin.window addTabbedWindow:c.window ordered:NSWindowAbove];
     [c.window makeKeyAndOrderFront:nil];
 }
 
-- (void)windowClosed:(DTRepoWindowController*)controller {
+- (void)windowClosed:(MGRepoWindowController*)controller {
     // Later: the controller is still running the close.
     dispatch_async(dispatch_get_main_queue(), ^{
         [self->_windows removeObject:controller];
@@ -171,7 +171,7 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
     auto add = [&](NSWindow* w) {
         if ([seen containsObject:w]) return;
         [seen addObject:w];
-        DTRepoWindowController* c = [w.windowController isKindOfClass:DTRepoWindowController.class] ? w.windowController : nil;
+        MGRepoWindowController* c = [w.windowController isKindOfClass:MGRepoWindowController.class] ? w.windowController : nil;
         if (!c || ![_windows containsObject:c] || !c.session) return;
         if (w == key) s.activeTab = (int)s.tabs.size();
         s.tabs.push_back(c.session->path);
@@ -181,13 +181,13 @@ static constexpr NSEventModifierFlags kCmd = NSEventModifierFlagCommand, kShift 
         if (tabs) for (NSWindow* t in tabs) add(t);
         else add(w);
     }
-    for (DTRepoWindowController* c in _windows) add(c.window);  // minimized windows
+    for (MGRepoWindowController* c in _windows) add(c.window);  // minimized windows
     s.Save();
 }
 
 // ---- UI snapshots
 
-// DREAMTREE_SNAPSHOT=<folder>: pictures of the first window at a few steps (the uncommitted changes, a
+// MANGROVE_SNAPSHOT=<folder>: pictures of the first window at a few steps (the uncommitted changes, a
 // commit, a diff unified and side by side) as PNG files, then quit. The CI smoke test of the interface.
 static BOOL SaveViewImage(NSView* v, NSString* path) {
     if (!v || NSIsEmptyRect(v.bounds)) return NO;
@@ -208,7 +208,7 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
 // "<name>.ready" file tells the test script to take a real screenshot now.
 - (void)snapshot:(NSString*)name {
     NSWindow* w = _windows.firstObject.window;
-    NSString* dir = NS(EnvVar("DREAMTREE_SNAPSHOT"));
+    NSString* dir = NS(EnvVar("MANGROVE_SNAPSHOT"));
     NSString* base = [dir stringByAppendingPathComponent:name.stringByDeletingPathExtension];
     const BOOL ok = SaveViewImage(w.contentView.superview ? w.contentView.superview : w.contentView, [base stringByAppendingPathExtension:@"png"]);
     NSMutableArray<NSString*>* rows = [NSMutableArray array];
@@ -226,14 +226,14 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
 }
 
 - (void)snapshotWindow:(NSWindow*)w name:(NSString*)name {
-    NSString* base = [NS(EnvVar("DREAMTREE_SNAPSHOT")) stringByAppendingPathComponent:name.stringByDeletingPathExtension];
+    NSString* base = [NS(EnvVar("MANGROVE_SNAPSHOT")) stringByAppendingPathComponent:name.stringByDeletingPathExtension];
     const BOOL ok = SaveViewImage(w.contentView.superview ? w.contentView.superview : w.contentView, [base stringByAppendingPathExtension:@"png"]);
     [[NSData data] writeToFile:[base stringByAppendingPathExtension:@"ready"] atomically:YES];
     NSLog(@"snapshot %@: %@", name, ok ? @"saved" : @"FAILED");
 }
 
 - (void)snapshotStep:(int)step tries:(int)tries {
-    DTRepoWindowController* c = _windows.firstObject;
+    MGRepoWindowController* c = _windows.firstObject;
     RepoSession* s = c.session;
     void (^after)(double, int, int) = ^(double seconds, int nextStep, int nextTries) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(seconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -302,7 +302,7 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
         return;
     case 6:  // the other layout
         AppSettings().diffSplit = !AppSettings().diffSplit;
-        [NSNotificationCenter.defaultCenter postNotificationName:DTSettingsChangedNotification object:nil];
+        [NSNotificationCenter.defaultCenter postNotificationName:MGSettingsChangedNotification object:nil];
         after(1.0, 7, 0);
         return;
     case 7:
@@ -315,28 +315,38 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
         return;
     case 10: case 12: case 14: case 16: {  // the settings, pane by pane
         NSArray<NSString*>* panes = @[ @"general", @"appearance", @"git", @"integrations" ];
-        [[DTPreferencesController shared] showPane:panes[(NSUInteger)(step - 10) / 2]];
+        [[MGPreferencesController shared] showPane:panes[(NSUInteger)(step - 10) / 2]];
         after(1.0, step + 1, 0);
         return;
     }
     case 11: case 13: case 15: case 17: {
         NSArray<NSString*>* names = @[ @"5-settings-general.png", @"6-settings-appearance.png", @"7-settings-git.png", @"8-settings-integrations.png" ];
-        [self snapshotWindow:[DTPreferencesController shared].window name:names[(NSUInteger)(step - 11) / 2]];
+        [self snapshotWindow:[MGPreferencesController shared].window name:names[(NSUInteger)(step - 11) / 2]];
         after(2.5, step + 1, 0);
         return;
     }
     case 18:  // the sheet that connects an account
-        [[DTPreferencesController shared] openAddAccount];
+        [[MGPreferencesController shared] openAddAccount];
         after(1.5, 19, 0);
         return;
     case 19: {
-        NSWindow* sheet = [DTPreferencesController shared].sheetWindow;
-        [self snapshotWindow:sheet ? sheet : [DTPreferencesController shared].window name:@"9-add-account.png"];
+        NSWindow* sheet = [MGPreferencesController shared].sheetWindow;
+        [self snapshotWindow:sheet ? sheet : [MGPreferencesController shared].window name:@"9-add-account.png"];
         after(2.5, 20, 0);
         return;
     }
-    case 20:
-        [[DTPreferencesController shared] closeSheets];
+    case 20:  // signing in with the browser: the code to enter on GitHub
+        [[MGPreferencesController shared] showSignInSample];
+        after(1.0, 21, 0);
+        return;
+    case 21: {
+        NSWindow* sheet = [MGPreferencesController shared].sheetWindow;
+        [self snapshotWindow:sheet ? sheet : [MGPreferencesController shared].window name:@"10-sign-in.png"];
+        after(2.5, 22, 0);
+        return;
+    }
+    case 22:
+        [[MGPreferencesController shared] closeSheets];
         after(0.5, 99, 0);
         return;
     default:
@@ -352,7 +362,7 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
 }
 
 - (IBAction)newWindowForTab:(id)sender {
-    DTRepoWindowController* c = [self newController:nil];
+    MGRepoWindowController* c = [self newController:nil];
     NSWindow* key = [self keyController].window;
     if (key.visible) [key addTabbedWindow:c.window ordered:NSWindowAbove];
     [c.window makeKeyAndOrderFront:nil];
@@ -365,7 +375,7 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
     panel.allowsMultipleSelection = YES;
     panel.prompt = @"Open";
     panel.message = @"Choose the folder of a Git repository.";
-    DTRepoWindowController* origin = [self keyController];
+    MGRepoWindowController* origin = [self keyController];
     __weak NSOpenPanel* weakPanel = panel;
     void (^done)(NSModalResponse) = ^(NSModalResponse r) {
         if (r != NSModalResponseOK) return;
@@ -385,13 +395,13 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
 }
 
 - (IBAction)showSettings:(id)sender {
-    [[DTPreferencesController shared] showWindow:nil];
+    [[MGPreferencesController shared] showWindow:nil];
 }
 
 - (IBAction)setPullMode:(NSMenuItem*)sender {
     AppSettings().pullMode = (int)sender.tag;
     AppSettings().Save();
-    [NSNotificationCenter.defaultCenter postNotificationName:DTSettingsChangedNotification object:nil];
+    [NSNotificationCenter.defaultCenter postNotificationName:MGSettingsChangedNotification object:nil];
 }
 
 - (BOOL)validateMenuItem:(NSMenuItem*)item {
@@ -422,19 +432,19 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
 - (NSMenu*)mainMenu {
     NSMenu* bar = [[NSMenu alloc] initWithTitle:@"Main Menu"];
 
-    NSMenu* app = Submenu(bar, @"DreamTree");
-    Item(app, @"About DreamTree", @selector(orderFrontStandardAboutPanel:), nil);
+    NSMenu* app = Submenu(bar, @"Mangrove");
+    Item(app, @"About Mangrove", @selector(orderFrontStandardAboutPanel:), nil);
     [app addItem:NSMenuItem.separatorItem];
     Item(app, @"Settings…", @selector(showSettings:), @",");
     [app addItem:NSMenuItem.separatorItem];
     NSMenu* services = Submenu(app, @"Services");
     NSApp.servicesMenu = services;
     [app addItem:NSMenuItem.separatorItem];
-    Item(app, @"Hide DreamTree", @selector(hide:), @"h");
+    Item(app, @"Hide Mangrove", @selector(hide:), @"h");
     Item(app, @"Hide Others", @selector(hideOtherApplications:), @"h", kCmd | kOpt);
     Item(app, @"Show All", @selector(unhideAllApplications:), nil);
     [app addItem:NSMenuItem.separatorItem];
-    Item(app, @"Quit DreamTree", @selector(terminate:), @"q");
+    Item(app, @"Quit Mangrove", @selector(terminate:), @"q");
 
     NSMenu* file = Submenu(bar, @"File");
     Item(file, @"New Window", @selector(newWindow:), @"n");

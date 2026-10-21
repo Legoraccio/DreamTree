@@ -30,19 +30,19 @@ struct Geo {
 
 }  // namespace
 
-@interface DTDiffController ()
+@interface MGDiffController ()
 @property(nonatomic, readonly) RepoSession* session;
 - (void)hunkAction:(int)hunk discard:(BOOL)discard;
 - (void)escape;
 @end
 
-@interface DTDiffDocView : NSView
-@property(nonatomic, weak) DTDiffController* controller;
+@interface MGDiffDocView : NSView
+@property(nonatomic, weak) MGDiffController* controller;
 - (void)diffChanged:(BOOL)anotherFile;
 - (void)jump:(int)dir;
 @end
 
-@implementation DTDiffDocView {
+@implementation MGDiffDocView {
     NSFont* _code;
     NSFont* _numFont;
     NSFont* _small;
@@ -478,8 +478,8 @@ static NSColor* FillerBg() {
 
 // ---------------------------------------------------------------- controller
 
-@implementation DTDiffController {
-    __weak DTRepoWindowController* _owner;
+@implementation MGDiffController {
+    __weak MGRepoWindowController* _owner;
     NSTextField* _letter;
     NSTextField* _where;
     NSTextField* _path;
@@ -489,7 +489,7 @@ static NSColor* FillerBg() {
     NSButton* _nextHunk;
     NSSegmentedControl* _mode;
     NSScrollView* _scroll;
-    DTDiffDocView* _doc;
+    MGDiffDocView* _doc;
     NSTextField* _message;
     NSString* _shownKey;  // the file on screen: another one starts from the top
     BOOL _hasStats;
@@ -501,7 +501,7 @@ static NSColor* FillerBg() {
     NSButton* _barDiscard;
 }
 
-- (instancetype)initWithOwner:(DTRepoWindowController*)owner {
+- (instancetype)initWithOwner:(MGRepoWindowController*)owner {
     if ((self = [super initWithNibName:nil bundle:nil])) _owner = owner;
     return self;
 }
@@ -548,7 +548,7 @@ static NSColor* FillerBg() {
     line.boxType = NSBoxSeparator;
 
     // body
-    _doc = [[DTDiffDocView alloc] initWithFrame:NSMakeRect(0, 0, 720, 400)];
+    _doc = [[MGDiffDocView alloc] initWithFrame:NSMakeRect(0, 0, 720, 400)];
     _doc.controller = self;
     _doc.autoresizingMask = NSViewWidthSizable;
     _scroll = [[NSScrollView alloc] init];
@@ -694,9 +694,9 @@ static NSColor* FillerBg() {
         _message.hidden = !d;  // most diffs arrive before "Loading" is worth showing
         if (!d) {
             const uint64_t seq = _waitSeq = m.seq;
-            __weak DTDiffController* weakSelf = self;
+            __weak MGDiffController* weakSelf = self;
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                DTDiffController* me = weakSelf;
+                MGDiffController* me = weakSelf;
                 RepoSession* rs = me.session;
                 if (me && rs && rs->diff.open && !rs->diff.diff && rs->diff.seq == seq && me->_waitSeq == seq) me->_message.hidden = NO;
             });
@@ -766,7 +766,7 @@ static NSColor* FillerBg() {
 - (void)modeChanged:(NSSegmentedControl*)sender {
     AppSettings().diffSplit = sender.selectedSegment == 1;
     AppSettings().Save();
-    [NSNotificationCenter.defaultCenter postNotificationName:DTSettingsChangedNotification object:nil];
+    [NSNotificationCenter.defaultCenter postNotificationName:MGSettingsChangedNotification object:nil];
 }
 
 @end

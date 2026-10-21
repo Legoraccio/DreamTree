@@ -428,7 +428,7 @@ void App::PaintStart(RepoTab&, const RectF& r) {
     float y = r.y + std::max(DR(40), std::round(r.h * 0.12f));
 
     Logo(x + DR(28), y + DR(28), DR(56));
-    gfx.Text(L"DreamTree", { x + DR(72), y - DR(4), cw, DR(46) }, F::Huge, Text);
+    gfx.Text(L"Mangrove", { x + DR(72), y - DR(4), cw, DR(46) }, F::Huge, Text);
     gfx.Text(L"A fast, native Git client for Windows", { x + DR(74), y + DR(40), cw, DR(22) }, F::UI, TextSec);
     y += DR(104);
 
@@ -510,7 +510,7 @@ void App::PaintError(RepoTab& t, const RectF& r) {
     button(L"Retry", Hit::Retry, !untrusted);
     button(L"Close tab", Hit::CloseTab, false);
     if (untrusted)
-        gfx.Text(L"Only DreamTree will trust it: your global Git configuration is not modified.",
+        gfx.Text(L"Only Mangrove will trust it: your global Git configuration is not modified.",
                  { x + DR(24), y + h + DR(12), cw, DR(18) }, F::Small, TextDim);
 }
 
@@ -1365,7 +1365,7 @@ void App::PaintDialog() {
     for (size_t i = 0; i < buttons.size(); ++i) AddZone(buttons[i], Hit::DialogButton, (int)i);
 }
 
-// Diagnostics for automated UI tests (DREAMTREE_DEBUG).
+// Diagnostics for automated UI tests (MANGROVE_DEBUG).
 void App::PaintDebug() {
     if (!TestMode()) return;
     RepoTab* t = Active();

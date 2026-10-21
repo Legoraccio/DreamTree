@@ -13,7 +13,7 @@ inline bool IsLowSurrogate(wchar_t c) { return sizeof(wchar_t) == 2 && c >= 0xDC
 
 double NowMs();     // monotonic clock, milliseconds
 int64_t UnixNow();  // seconds since 1970
-bool TestMode();    // DREAMTREE_DEBUG is set: diagnostics for UI tests
+bool TestMode();    // MANGROVE_DEBUG is set: diagnostics for UI tests
 
 std::wstring FormatRelative(int64_t unixSec);  // "5 minutes ago", "yesterday", "14 Oct", "3 Mar 2024"
 std::wstring FormatDateLong(int64_t unixSec);  // "18 Oct 2026, 10:42"

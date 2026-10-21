@@ -9,11 +9,11 @@ static NSToolbarItemIdentifier const kFetch = @"fetch", kPull = @"pull", kPush =
 // ---------------------------------------------------------------- notices
 
 // A short message at the bottom of the history: the outcome of an operation.
-@interface DTBanner : NSVisualEffectView
+@interface MGBanner : NSVisualEffectView
 - (void)showTitle:(NSString*)title message:(NSString*)message error:(BOOL)error;
 @end
 
-@implementation DTBanner {
+@implementation MGBanner {
     NSImageView* _icon;
     NSTextField* _title;
     NSTextField* _message;
@@ -65,9 +65,9 @@ static NSToolbarItemIdentifier const kFetch = @"fetch", kPull = @"pull", kPush =
     self.alphaValue = 1;
     self.hidden = NO;
     const NSUInteger shown = ++_shown;
-    __weak DTBanner* weakSelf = self;
+    __weak MGBanner* weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((error ? 8 : 4) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        DTBanner* me = weakSelf;
+        MGBanner* me = weakSelf;
         if (me && me->_shown == shown) [me dismiss];
     });
 }
@@ -92,26 +92,26 @@ static NSToolbarItemIdentifier const kFetch = @"fetch", kPull = @"pull", kPush =
 // ---------------------------------------------------------------- the center of the window
 
 // Holds the history, the diff or a message (loading, errors), one at a time, and the notices above them.
-@interface DTCenterController : NSViewController
-@property(nonatomic, readonly) DTBanner* banner;
-@property(nonatomic, weak) DTRepoWindowController* owner;
+@interface MGCenterController : NSViewController
+@property(nonatomic, readonly) MGBanner* banner;
+@property(nonatomic, weak) MGRepoWindowController* owner;
 - (void)show:(NSView*)pane;
 - (void)remove:(NSView*)pane;
 @end
 
-@implementation DTCenterController {
+@implementation MGCenterController {
     NSMutableArray<NSView*>* _panes;
 }
 
 - (void)loadView {
-    DTDropView* v = [[DTDropView alloc] initWithFrame:NSMakeRect(0, 0, 720, 520)];
-    __weak DTCenterController* weakSelf = self;
+    MGDropView* v = [[MGDropView alloc] initWithFrame:NSMakeRect(0, 0, 720, 520)];
+    __weak MGCenterController* weakSelf = self;
     v.onDrop = ^(NSArray<NSString*>* folders) {
         for (NSString* f in folders) [App() openRepository:f from:weakSelf.owner];
     };
     self.view = v;
     _panes = [NSMutableArray array];
-    _banner = [[DTBanner alloc] initWithFrame:NSZeroRect];
+    _banner = [[MGBanner alloc] initWithFrame:NSZeroRect];
     _banner.translatesAutoresizingMaskIntoConstraints = NO;
     [v addSubview:_banner];
     [NSLayoutConstraint activateConstraints:@[
@@ -188,29 +188,29 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
 
 // ---------------------------------------------------------------- start page
 
-@interface DTStartController : NSViewController
-- (instancetype)initWithOwner:(DTRepoWindowController*)owner;
+@interface MGStartController : NSViewController
+- (instancetype)initWithOwner:(MGRepoWindowController*)owner;
 @end
 
-@implementation DTStartController {
-    __weak DTRepoWindowController* _owner;
+@implementation MGStartController {
+    __weak MGRepoWindowController* _owner;
 }
 
-- (instancetype)initWithOwner:(DTRepoWindowController*)owner {
+- (instancetype)initWithOwner:(MGRepoWindowController*)owner {
     if ((self = [super initWithNibName:nil bundle:nil])) _owner = owner;
     return self;
 }
 
 - (void)loadView {
-    DTDropView* v = [[DTDropView alloc] initWithFrame:NSMakeRect(0, 0, 900, 600)];
-    __weak DTRepoWindowController* owner = _owner;
+    MGDropView* v = [[MGDropView alloc] initWithFrame:NSMakeRect(0, 0, 900, 600)];
+    __weak MGRepoWindowController* owner = _owner;
     v.onDrop = ^(NSArray<NSString*>* folders) {
         for (NSString* f in folders) [App() openRepository:f from:owner];
     };
     NSImageView* icon = [NSImageView imageViewWithImage:NSApp.applicationIconImage];
     [icon.widthAnchor constraintEqualToConstant:96].active = YES;
     [icon.heightAnchor constraintEqualToConstant:96].active = YES;
-    NSTextField* title = MakeLabel(@"DreamTree", [NSFont systemFontOfSize:26 weight:NSFontWeightBold], NSColor.labelColor);
+    NSTextField* title = MakeLabel(@"Mangrove", [NSFont systemFontOfSize:26 weight:NSFontWeightBold], NSColor.labelColor);
     NSTextField* sub = MakeLabel(@"Open the folder of a Git repository, or drop it here.", [NSFont systemFontOfSize:13], NSColor.secondaryLabelColor);
     NSButton* open = [NSButton buttonWithTitle:@"Open Repository…" target:nil action:@selector(openDocument:)];
     open.keyEquivalent = @"\r";
@@ -275,10 +275,10 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
 // ---------------------------------------------------------------- new branch
 
 // Asks for the name of a new branch, checking it while it is typed.
-@interface DTBranchPrompt : NSObject <NSTextFieldDelegate>
+@interface MGBranchPrompt : NSObject <NSTextFieldDelegate>
 @end
 
-@implementation DTBranchPrompt {
+@implementation MGBranchPrompt {
     std::weak_ptr<RepoSession> _session;
     int32_t _commit;
     NSAlert* _alert;
@@ -320,7 +320,7 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
     _alert.buttons[0].enabled = NO;
     [_alert layout];
     _alert.window.initialFirstResponder = _field;
-    DTBranchPrompt* keep = self;  // alive until the sheet ends
+    MGBranchPrompt* keep = self;  // alive until the sheet ends
     [_alert beginSheetModalForWindow:window
                    completionHandler:^(NSModalResponse r) {
                        if (r != NSAlertFirstButtonReturn) return;
@@ -345,16 +345,16 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
 
 // ---------------------------------------------------------------- the window
 
-@implementation DTRepoWindowController {
+@implementation MGRepoWindowController {
     std::shared_ptr<RepoSession> _session;
     NSSplitViewController* _split;
     NSSplitViewItem* _sideItem;
     NSSplitViewItem* _detailItem;
-    DTSidebarController* _sidebar;
-    DTHistoryController* _history;
-    DTDetailsController* _details;
-    DTDiffController* _diff;
-    DTCenterController* _center;
+    MGSidebarController* _sidebar;
+    MGHistoryController* _history;
+    MGDetailsController* _details;
+    MGDiffController* _diff;
+    MGCenterController* _center;
     NSView* _message;          // loading or error, in place of the history
     NSString* _messageKey;     // what _message shows
     NSSearchToolbarItem* _search;
@@ -372,23 +372,23 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
     w.releasedWhenClosed = NO;
     w.restorable = NO;
     w.minSize = NSMakeSize(760, 460);
-    w.tabbingIdentifier = @"DreamTree";
+    w.tabbingIdentifier = @"Mangrove";
     w.toolbarStyle = NSWindowToolbarStyleUnified;
-    w.title = @"DreamTree";
+    w.title = @"Mangrove";
     if (!(self = [super initWithWindow:w])) return nil;
     w.delegate = self;
     _pullBadge = _pushBadge = -1;
-    NSToolbar* tb = [[NSToolbar alloc] initWithIdentifier:@"DreamTree.toolbar"];
+    NSToolbar* tb = [[NSToolbar alloc] initWithIdentifier:@"Mangrove.toolbar"];
     tb.delegate = self;
     tb.displayMode = NSToolbarDisplayModeIconOnly;
     tb.allowsUserCustomization = YES;
     tb.autosavesConfiguration = YES;
     w.toolbar = tb;
-    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(settingsChanged:) name:DTSettingsChangedNotification object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(settingsChanged:) name:MGSettingsChangedNotification object:nil];
     if (path.length) [self openRepository:path];
     else [self showStart];
     [w center];
-    [w setFrameAutosaveName:@"DreamTree.window"];  // only the first window gets it; tabs share their window's frame
+    [w setFrameAutosaveName:@"Mangrove.window"];  // only the first window gets it; tabs share their window's frame
     return self;
 }
 
@@ -405,7 +405,7 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
 - (void)showStart {
     _session.reset();
     self.window.toolbar.visible = NO;  // nothing to act on yet
-    [self setContent:[[DTStartController alloc] initWithOwner:self]];
+    [self setContent:[[MGStartController alloc] initWithOwner:self]];
     [self updateTitle];
 }
 
@@ -413,7 +413,7 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
     _session = std::make_shared<RepoSession>();
     _session->path = NormalizePath(WS(path));
     _session->title = BaseName(_session->path);
-    __weak DTRepoWindowController* weakSelf = self;
+    __weak MGRepoWindowController* weakSelf = self;
     _session->onEvent = [weakSelf](SessionEvent e) { [weakSelf sessionEvent:e]; };
     [self buildRepositoryViews];
     self.window.toolbar.visible = YES;
@@ -424,11 +424,11 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
 }
 
 - (void)buildRepositoryViews {
-    _sidebar = [[DTSidebarController alloc] initWithOwner:self];
-    _history = [[DTHistoryController alloc] initWithOwner:self];
-    _details = [[DTDetailsController alloc] initWithOwner:self];
-    _diff = [[DTDiffController alloc] initWithOwner:self];
-    _center = [[DTCenterController alloc] initWithNibName:nil bundle:nil];
+    _sidebar = [[MGSidebarController alloc] initWithOwner:self];
+    _history = [[MGHistoryController alloc] initWithOwner:self];
+    _details = [[MGDetailsController alloc] initWithOwner:self];
+    _diff = [[MGDiffController alloc] initWithOwner:self];
+    _center = [[MGCenterController alloc] initWithNibName:nil bundle:nil];
     _center.owner = self;
     _split = [[NSSplitViewController alloc] init];
     _sideItem = [NSSplitViewItem sidebarWithViewController:_sidebar];
@@ -437,7 +437,7 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
     NSSplitViewItem* center = [NSSplitViewItem splitViewItemWithViewController:_center];
     center.minimumThickness = 380;
     _detailItem = nil;
-#if DT_SDK_14
+#if MG_SDK_14
     if (@available(macOS 14.0, *)) _detailItem = [NSSplitViewItem inspectorWithViewController:_details];
 #endif
     if (!_detailItem) {
@@ -451,7 +451,7 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
     [_split addSplitViewItem:_sideItem];
     [_split addSplitViewItem:center];
     [_split addSplitViewItem:_detailItem];
-    _split.splitView.autosaveName = @"DreamTree.split";
+    _split.splitView.autosaveName = @"Mangrove.split";
     [self setContent:_split];
 }
 
@@ -550,7 +550,7 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
         [buttons addObject:[NSButton buttonWithTitle:@"Open Another…" target:nil action:@selector(openDocument:)]];
         NSString* detail = NS(s->error);
         if (!s->untrusted.empty())
-            detail = [detail stringByAppendingFormat:@"\n\nTrusting it adds %@ to Git's safe directories for DreamTree only.", NS(s->untrusted)];
+            detail = [detail stringByAppendingFormat:@"\n\nTrusting it adds %@ to Git's safe directories for Mangrove only.", NS(s->untrusted)];
         _message = MessageView([NSString stringWithFormat:@"Can't open “%@”", NS(s->title)], detail, NO, buttons);
     }
     [_center show:_message];
@@ -559,7 +559,7 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
 - (void)updateTitle {
     RepoSession* s = _session.get();
     NSWindow* w = self.window;
-    NSString* title = s ? NS(s->data ? s->data->name : s->title) : @"DreamTree";
+    NSString* title = s ? NS(s->data ? s->data->name : s->title) : @"Mangrove";
     NSString* sub = @"";
     if (s && s->opBusy) {
         sub = [NS(s->opLabel) stringByAppendingString:@"…"];
@@ -648,8 +648,8 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
 - (void)newBranchAt:(int32_t)commit {
     RepoSession* s = _session.get();
     if (!s || !s->CanRun(ActBranch, nullptr)) return;
-    __weak DTCenterController* center = _center;
-    [[[DTBranchPrompt alloc] initWithSession:_session commit:commit] runInWindow:self.window
+    __weak MGCenterController* center = _center;
+    [[[MGBranchPrompt alloc] initWithSession:_session commit:commit] runInWindow:self.window
                                                                             done:^(NSString* error) {
                                                                                 [center.banner showTitle:@"Couldn't create the branch" message:error error:YES];
                                                                             }];
@@ -993,7 +993,7 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
 - (IBAction)setDiffLayout:(NSMenuItem*)sender {
     AppSettings().diffSplit = sender.tag == 1;
     AppSettings().Save();
-    [NSNotificationCenter.defaultCenter postNotificationName:DTSettingsChangedNotification object:nil];
+    [NSNotificationCenter.defaultCenter postNotificationName:MGSettingsChangedNotification object:nil];
 }
 
 - (IBAction)closeDiff:(id)sender {
@@ -1074,7 +1074,7 @@ static NSView* MessageView(NSString* title, NSString* detail, BOOL spinner, NSAr
 
 // Pull and Push show how many commits they would bring in or send (macOS 26).
 - (void)updateBadge:(NSToolbarItem*)item {
-#if DT_SDK_26
+#if MG_SDK_26
     if (@available(macOS 26.0, *)) {
         const bool pull = [item.itemIdentifier isEqualToString:kPull], push = [item.itemIdentifier isEqualToString:kPush];
         if (!pull && !push) return;

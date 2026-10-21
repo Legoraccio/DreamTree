@@ -2,6 +2,7 @@
 #include "platform.h"
 #include "settings.h"
 #include "text.h"
+#include <chrono>
 #include <cstdlib>
 
 namespace {
@@ -73,7 +74,8 @@ void AppendUtf8(std::string& out, uint32_t cp) {
     }
 }
 
-// Reads the string members at the top level of the JSON object a server answers with.
+// Reads the members at the top level of the JSON object a server answers with: strings decoded, other values
+// (numbers, true, ...) as written.
 class Json {
 public:
     explicit Json(std::string_view text) : s(text) {}
@@ -93,8 +95,10 @@ public:
                 std::string value;
                 if (!String(value)) return {};
                 if (name == key) return value;
-            } else if (!Skip()) {
-                return {};
+            } else {
+                const size_t from = p;
+                if (!Skip()) return {};
+                if (name == key) return std::string(TrimSv(s.substr(from, p - from)));
             }
             Space();
             if (!Eat(',')) return {};
@@ -186,6 +190,53 @@ std::wstring Lower(std::wstring s) {
     return s;
 }
 
+// Mangrove's OAuth app on github.com: Device Flow on, user tokens that don't expire (Mangrove doesn't renew them),
+// see the README. The device flow needs no client secret, and a client ID is public. Empty: no signing in with the
+// browser.
+constexpr char kGitHubClientId[] = "Ov23li3hoJcbPe6kwo7l";
+
+// The client ID in use: MANGROVE_GITHUB_CLIENT_ID (another OAuth app, to try it) or Mangrove's.
+const std::string& GitHubClientId() {
+    static const std::string id = [] {
+        const std::wstring env = EnvVar("MANGROVE_GITHUB_CLIENT_ID");
+        return env.empty() ? std::string(kGitHubClientId) : Narrow(env);
+    }();
+    return id;
+}
+
+std::string FormEncode(std::string_view s) {
+    static const char hex[] = "0123456789ABCDEF";
+    std::string out;
+    for (const char ch : s) {
+        const unsigned char c = (unsigned char)ch;
+        if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '-' || c == '_' || c == '.' || c == '~') {
+            out.push_back((char)c);
+        } else {
+            out.push_back('%');
+            out.push_back(hex[c >> 4]);
+            out.push_back(hex[c & 15]);
+        }
+    }
+    return out;
+}
+
+int ToInt(const std::string& s, int def) {
+    char* end = nullptr;
+    const long v = std::strtol(s.c_str(), &end, 10);
+    return end && end != s.c_str() ? (int)std::clamp(v, -1000000L, 1000000L) : def;
+}
+
+// What the service's OAuth error codes mean for the user.
+std::wstring SignInError(int status, const std::string& code, const std::string& description) {
+    if (code == "device_flow_disabled") return L"Signing in with the browser isn't enabled for Mangrove's GitHub app.";
+    if (code == "incorrect_client_credentials" || code == "unauthorized_client" || code == "invalid_client")
+        return L"GitHub doesn't know Mangrove's app: use a token instead.";
+    if (code == "incorrect_device_code" || code == "bad_verification_code") return L"GitHub didn't recognize the code: start again.";
+    if (!code.empty())
+        return L"GitHub refused the sign-in (" + Widen(code) + L")" + (description.empty() ? L"." : L": " + Widen(description));
+    return L"GitHub answered with error " + std::to_wstring(status) + L".";
+}
+
 }  // namespace
 
 const std::vector<ForgeInfo>& Forges() { return kForges; }
@@ -256,9 +307,9 @@ std::wstring NormalizeServer(const std::wstring& input, std::wstring* error) {
 std::wstring TokenPageUrl(Forge f, const std::wstring& server) {
     switch (f) {
     case Forge::GitLab:
-        return server + L"/-/user_settings/personal_access_tokens?name=DreamTree&scopes=read_user,read_repository,write_repository";
+        return server + L"/-/user_settings/personal_access_tokens?name=Mangrove&scopes=read_user,read_repository,write_repository";
     case Forge::Gitea: return server + L"/user/settings/applications";
-    default: return server + L"/settings/tokens/new?scopes=repo,workflow,read:user&description=DreamTree";
+    default: return server + L"/settings/tokens/new?scopes=repo,workflow,read:user&description=Mangrove";
     }
 }
 
@@ -282,7 +333,7 @@ TokenCheck CheckToken(Forge f, const std::wstring& serverInput, const std::strin
     const std::wstring service = InfoOf(f).name;
     const std::string base = Narrow(server);
     std::string url;
-    std::vector<std::string> headers{ "User-Agent: DreamTree", "Accept: application/json" };
+    std::vector<std::string> headers{ "User-Agent: Mangrove", "Accept: application/json" };
     switch (f) {
     case Forge::GitHub:
         url = server == L"https://github.com" ? "https://api.github.com/user" : base + "/api/v3/user";  // GitHub Enterprise Server
@@ -346,7 +397,7 @@ TokenCheck CheckToken(Forge f, const std::wstring& serverInput, const std::strin
 }
 
 bool AddAccount(const Account& a, const std::string& token, std::wstring* error) {
-    const std::wstring label = std::wstring(L"DreamTree: ") + InfoOf(a.forge).name + L" token of " + a.login + L" on " + a.Host();
+    const std::wstring label = std::wstring(L"Mangrove: ") + InfoOf(a.forge).name + L" token of " + a.login + L" on " + a.Host();
     if (!SecretSave(a.Key(), std::string(TrimSv(token)), label)) {
         if (error) *error = L"Couldn't store the token in " + SecretStoreName() + L".";
         return false;
@@ -365,6 +416,114 @@ void RemoveAccount(const Account& a) {
     std::vector<Account> list = LoadAccounts();
     list.erase(std::remove_if(list.begin(), list.end(), [&](const Account& x) { return x.Key() == a.Key(); }), list.end());
     SaveAccounts(list);
+}
+
+// ---------------------------------------------------------------- signing in with the browser
+
+bool BrowserSignInAvailable(Forge f, const std::wstring& server) {
+    std::wstring why;
+    return f == Forge::GitHub && !GitHubClientId().empty() && NormalizeServer(server, &why) == L"https://github.com";
+}
+
+DeviceCode ParseDeviceCode(int status, const std::string& body) {
+    DeviceCode d;
+    Json json(body);
+    const std::string error = json.Member("error");
+    if (status != 200 || !error.empty()) {
+        d.error = SignInError(status, error, json.Member("error_description"));
+        return d;
+    }
+    d.deviceCode = json.Member("device_code");
+    d.userCode = Widen(json.Member("user_code"));
+    d.verifyUrl = Widen(json.Member("verification_uri"));
+    d.interval = std::clamp(ToInt(json.Member("interval"), 5), 1, 60);
+    d.expiresIn = std::clamp(ToInt(json.Member("expires_in"), 900), 60, 3600);
+    if (d.deviceCode.empty() || d.userCode.empty()) d.error = L"GitHub gave an unexpected answer.";
+    return d;
+}
+
+DevicePoll ParseDevicePoll(int status, const std::string& body) {
+    DevicePoll p;
+    Json json(body);
+    const std::string token = json.Member("access_token"), error = json.Member("error");
+    if (!token.empty() && error.empty()) {
+        p.state = DeviceState::Granted;
+        p.token = token;
+    } else if (error == "authorization_pending") {
+        p.state = DeviceState::Pending;
+    } else if (error == "slow_down") {
+        p.state = DeviceState::SlowDown;
+        p.interval = std::clamp(ToInt(json.Member("interval"), 0), 0, 120);
+    } else if (error == "access_denied") {
+        p.state = DeviceState::Denied;
+    } else if (error == "expired_token") {
+        p.state = DeviceState::Expired;
+    } else {
+        p.error = SignInError(status, error, json.Member("error_description"));
+    }
+    return p;
+}
+
+TokenCheck BrowserSignIn(Forge f, const std::wstring& serverInput, const std::function<void(const DeviceCode&)>& onCode,
+                         const std::atomic<bool>& cancel, std::string* token) {
+    TokenCheck r;
+    std::wstring why;
+    const std::wstring server = NormalizeServer(serverInput, &why);
+    if (!BrowserSignInAvailable(f, server)) {
+        r.error = L"Signing in with the browser isn't available for this server: use a token.";
+        return r;
+    }
+    const std::vector<std::string> headers{ "User-Agent: Mangrove", "Accept: application/json" };
+    const std::string client = "client_id=" + FormEncode(GitHubClientId());
+    HttpResponse res = HttpPost("https://github.com/login/device/code", headers, client + "&scope=" + FormEncode("repo workflow read:user"));
+    if (res.status == 0) {
+        r.error = L"Couldn't reach github.com: " + Widen(res.error);
+        return r;
+    }
+    DeviceCode code = ParseDeviceCode(res.status, res.body);
+    if (!code.error.empty()) {
+        r.error = code.error;
+        return r;
+    }
+    // The page that takes the code is the server's own: anything else isn't opened.
+    if (code.verifyUrl.compare(0, server.size() + 1, server + L"/") != 0) code.verifyUrl = server + L"/login/device";
+    if (onCode) onCode(code);
+
+    const std::string ask = client + "&device_code=" + FormEncode(code.deviceCode) +
+                            "&grant_type=" + FormEncode("urn:ietf:params:oauth:grant-type:device_code");
+    const double deadline = NowMs() + code.expiresIn * 1000.0;
+    int interval = code.interval;
+    for (;;) {
+        for (const double until = NowMs() + interval * 1000.0; NowMs() < until;) {  // waits, and stops at once on cancel
+            if (cancel) {
+                r.error = L"Cancelled.";
+                return r;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        if (NowMs() > deadline) {
+            r.error = L"The code expired before it was used: start again.";
+            return r;
+        }
+        res = HttpPost("https://github.com/login/oauth/access_token", headers, ask);
+        if (cancel) {
+            r.error = L"Cancelled.";
+            return r;
+        }
+        if (res.status == 0) continue;  // the network failed for a moment: ask again at the next turn
+        const DevicePoll p = ParseDevicePoll(res.status, res.body);
+        switch (p.state) {
+        case DeviceState::Pending: break;
+        case DeviceState::SlowDown: interval = std::max(interval + 5, p.interval); break;
+        case DeviceState::Denied: r.error = L"Mangrove wasn't authorized on GitHub."; return r;
+        case DeviceState::Expired: r.error = L"The code expired before it was used: start again."; return r;
+        case DeviceState::Failed: r.error = p.error; return r;
+        case DeviceState::Granted:
+            r = CheckToken(f, server, p.token);
+            if (r.ok && token) *token = p.token;
+            return r;
+        }
+    }
 }
 
 std::vector<std::string> GitAuthEnvironment(const std::vector<Account>& accounts) {

@@ -1,8 +1,9 @@
-// The Settings window: DreamTree's preferences by category, laid out like the Windows 11 Settings app (a
+// The Settings window: Mangrove's preferences by category, laid out like the Windows 11 Settings app (a
 // navigation pane, pages of cards). General, Appearance and Git, and Integrations: the accounts on GitHub,
-// GitLab and Gitea / Forgejo that fetch, pull and push use over HTTPS. A token is checked with its server
-// before it is kept, in Windows Credential Manager (src\core\accounts.cpp); the token box shows bullets and
-// never copies what it holds.
+// GitLab and Gitea / Forgejo that fetch, pull and push use over HTTPS. An account connects by signing in with
+// the browser (github.com: a code to enter on GitHub) or with a token pasted in a box that shows dots and never
+// copies it; either way the token is checked with its server, then kept in Windows Credential Manager
+// (src\core\accounts.cpp).
 
 #include "app.h"
 #include "theme.h"
@@ -18,6 +19,7 @@ constexpr float kHeadH = 72.f;    // the page title, above the cards that scroll
 constexpr float kMaxW = 1000.f;   // cards are at most this wide
 constexpr float kCardMinH = 68.f;
 constexpr UINT_PTR kCaretTimer = 3;
+constexpr UINT_PTR kSpinTimer = 5;  // spinners turn on a timer, not frame after frame: an authorization can take minutes
 
 enum Page : int { kGeneral, kAppearance, kGit, kIntegrations, kPages };
 const wchar_t* const kPageTitles[kPages] = { L"General", L"Appearance", L"Git", L"Integrations" };
@@ -25,6 +27,7 @@ const wchar_t kPageGlyphs[kPages] = { 0xE713, 0xE790, 0, 0xE77B };  // Git has t
 
 enum class SHit : uint8_t {
     None, Block, Nav, Toggle, Choice, Zoom, TrustRemove, AccountRemove, Service, Field, CreateToken, Connect, Scroll, DialogButton,
+    SignIn, OpenCode, CancelSignIn,
 };
 
 struct SZone {
@@ -37,12 +40,16 @@ enum : int { kReopen, kDetails, kNavIcons };       // toggles
 enum : int { kPull, kDiffs, kTheme };              // choices (drop-down lists)
 enum : int { kNoField, kServer, kToken };          // text boxes
 enum : int { kInfo, kError, kSuccess, kWarning };  // how the token check went
+enum : int { kSignInIdle, kSignInStarting, kSignInWaiting };  // signing in with the browser: asking for a code, then for the token
 
-const th::Theme kThemes[] = { th::Theme::System, th::Theme::Light, th::Theme::Dark, th::Theme::DreamTree };
+const th::Theme kThemes[] = { th::Theme::System, th::Theme::Light, th::Theme::Dark, th::Theme::Mangrove };
 const std::vector<std::wstring> kThemeLabels = { L"Windows (system setting)", L"Windows light", L"Windows dark",
-                                                 L"DreamTree (navy and gold)" };
+                                                 L"Mangrove (navy and gold)" };
 const std::vector<std::wstring> kDiffLabels = { L"Unified", L"Side by side" };
 constexpr wchar_t kServerHelp[] = L"Change it for GitHub Enterprise, a self-managed GitLab or another Gitea / Forgejo server.";
+constexpr wchar_t kBrowserHelp[] =
+    L"Mangrove shows a code to enter on GitHub: once you authorize Mangrove there, the account is connected, with no token to copy.";
+constexpr wchar_t kCodeHelp[] = L"Enter this code on GitHub, then authorize Mangrove:";
 
 RectF Intersect(const RectF& a, const RectF& b) {
     const float x0 = std::max(a.x, b.x), y0 = std::max(a.y, b.y);
@@ -86,6 +93,8 @@ public:
     void ThemeChanged();
     void ForSnapshot(int state);
     void TokenChecked(const TokenCheck& check, const std::string& tok);
+    void CodeArrived(const std::wstring& code, const std::wstring& url);
+    void SignedIn(const TokenCheck& check, const std::string& tok);
     static LRESULT CALLBACK Thunk(HWND h, UINT m, WPARAM w, LPARAM l);
 
 private:
@@ -137,6 +146,10 @@ private:
     void SetService(int i);
     void CreateToken();
     void Connect();
+    void Connected(const TokenCheck& check, const std::string& tok, bool pasted);
+    void StartSignIn();
+    void EndSignIn();  // stops waiting for the authorization
+    void OpenSignInPage();
     void WipeToken();
     void SetStatus(std::wstring text, int kind) { status = std::move(text); statusKind = kind; }
     void Ask(const Prompt& p, std::function<void(int)> onResult);
@@ -173,6 +186,10 @@ private:
     TextEdit token{ L"", 0, 0, false, 500 };
     int focus = kNoField;
     bool busy = false;  // a token is being checked
+    int signIn = kSignInIdle;
+    std::shared_ptr<std::atomic<bool>> signInCancel;  // set to stop the sign-in's worker thread
+    std::wstring userCode, verifyUrl;                 // the code to enter, and where
+    bool scrollToEnd = false;                         // at the next paint (pictures for the tests)
     std::wstring status;
     int statusKind = kInfo;
     bool gitAsked = false;
@@ -207,7 +224,7 @@ bool SettingsWindow::Create() {
         wc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(1));
         wc.hIconSm = (HICON)LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
                                        GetSystemMetrics(SM_CYSMICON), 0);
-        wc.lpszClassName = L"DreamTreeSettings";
+        wc.lpszClassName = L"MangroveSettings";
         cls = RegisterClassExW(&wc);
         if (!cls) return false;
     }
@@ -223,7 +240,7 @@ bool SettingsWindow::Create() {
     if (owner && !IsIconic(owner)) GetWindowRect(owner, &orc);
     const int x = std::clamp((int)(orc.left + orc.right - ww) / 2, (int)wa.left, std::max((int)wa.left, (int)wa.right - ww));
     const int y = std::clamp((int)(orc.top + orc.bottom - wh) / 2, (int)wa.top, std::max((int)wa.top, (int)wa.bottom - wh));
-    hwnd = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP, L"DreamTreeSettings", L"DreamTree Settings", WS_OVERLAPPEDWINDOW, x, y, ww, wh,
+    hwnd = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP, L"MangroveSettings", L"Mangrove Settings", WS_OVERLAPPEDWINDOW, x, y, ww, wh,
                            owner, nullptr, inst, nullptr);
     if (!hwnd) return false;
     dpi = GetDpiForWindow(hwnd);
@@ -425,6 +442,8 @@ LRESULT SettingsWindow::Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
     case WM_DESTROY:
         KillTimer(h, kCaretTimer);
+        KillTimer(h, kSpinTimer);
+        EndSignIn();  // closing the window gives up on the authorization
         WipeToken();  // a token typed and not connected doesn't stay around
         focus = kNoField;
         dialog = DialogState{};
@@ -454,7 +473,7 @@ void SettingsWindow::Paint() {
     const RectF full{ 0, 0, W, H };
     clip = full;
     titleH = std::max(DR(kTitleH), std::round(caption.b()));
-    // One surface, title bar included: Mica in the Windows themes, navy in DreamTree's.
+    // One surface, title bar included: Mica in the Windows themes, navy in Mangrove's.
     g.Fill(full, PanelBg);
     DrawLogo(g, DR(24), std::round(titleH * 0.5f), DR(16));
     g.Text(L"Settings", { DR(44), 0, std::max(0.f, (caption.w > 0 ? caption.x : W) - DR(52)), titleH }, F::Small, active ? Text : TextDim);
@@ -477,7 +496,8 @@ void SettingsWindow::Paint() {
 
     if (focus && !dialog.active) SetTimer(hwnd, kCaretTimer, 530, nullptr);
     else KillTimer(hwnd, kCaretTimer);
-    if (busy) animating = true;  // the spinner
+    if (busy || signIn != kSignInIdle) SetTimer(hwnd, kSpinTimer, 33, nullptr);
+    else KillTimer(hwnd, kSpinTimer);
     if (animating) Invalidate();
     else lastFrame = 0;
     UpdateHover();  // the zones moved (scrolling, another page)
@@ -525,6 +545,11 @@ void SettingsWindow::PaintPage(const RectF& view) {
     const double before = scroll.pos;
     scroll.Clamp();
     if (scroll.pos != before) animating = true;  // the page got shorter
+    if (scrollToEnd) {
+        scrollToEnd = false;
+        scroll.To(scroll.Max(), true);
+        animating = true;
+    }
 
     // the scroll bar: thin, wider while the pointer is on it
     RectF thumb;
@@ -653,7 +678,7 @@ void SettingsWindow::AddZone(const RectF& r, SHit id, int a) {
 
 void SettingsWindow::PaintGeneral(float& y) {
     const Settings& s = AppSettings();
-    RectF c = Card(y, { 0xE838 }, L"Reopen repositories at launch", L"The tabs that were open when DreamTree closed open again.",
+    RectF c = Card(y, { 0xE838 }, L"Reopen repositories at launch", L"The tabs that were open when Mangrove closed open again.",
                    DR(100), DR(32));
     ToggleSwitch(c, s.restoreTabs, kReopen);
     const std::vector<std::wstring>& pull = PullModeLabels();
@@ -671,8 +696,8 @@ void SettingsWindow::PaintAppearance(float& y) {
     for (int i = 0; i < 4; ++i)
         if (g_app && kThemes[i] == g_app->theme) theme = i;
     RectF c = Card(y, { 0xE790 }, L"Theme",
-                   contrast ? L"A contrast theme is on in Windows: DreamTree uses its colors."
-                            : L"The Windows themes follow your accent color; DreamTree's own theme is navy and gold.",
+                   contrast ? L"A contrast theme is on in Windows: Mangrove uses its colors."
+                            : L"The Windows themes follow your accent color; Mangrove's own theme is navy and gold.",
                    ChoiceWidth(kThemeLabels), DR(32));
     ChoiceBox(c, kThemeLabels[(size_t)theme], kTheme, !contrast);
 
@@ -716,7 +741,7 @@ void SettingsWindow::PaintGit(float& y) {
         }).detach();
     }
     if (!version.empty()) Card(y, { 0, true }, L"Git " + version, GitPath(false), 0, 0);
-    else if (gitChecked) Card(y, { 0xE7BA }, L"Git wasn't found", L"Install Git for Windows (git-scm.com), then open DreamTree again.", 0, 0);
+    else if (gitChecked) Card(y, { 0xE7BA }, L"Git wasn't found", L"Install Git for Windows (git-scm.com), then open Mangrove again.", 0, 0);
     else Card(y, { 0, true }, L"Git", L"Looking for Git…", 0, 0);
 
     Section(y, L"Trusted folders");
@@ -734,7 +759,7 @@ void SettingsWindow::PaintIntegrations(float& y) {
     Gfx& g = *gfx;
     Paragraph(y, AccountsIntro());
     Section(y, L"Accounts");
-    if (accounts.empty()) Card(y, {}, L"No accounts yet", L"Add one below: DreamTree checks the token with the server first.", 0, 0, &TextSec);
+    if (accounts.empty()) Card(y, {}, L"No accounts yet", L"Add one below: Mangrove checks the token with the server first.", 0, 0, &TextSec);
     for (size_t i = 0; i < accounts.size(); ++i) {
         const Account& a = accounts[i];
         Author av;  // the same initials and color as in the macOS app
@@ -742,15 +767,16 @@ void SettingsWindow::PaintIntegrations(float& y) {
         av.color = AvatarColor(a.Key());
         const RectF c = Card(y, { 0, false, &av }, AccountTitle(a), std::wstring(InfoOf(a.forge).name) + L" · " + a.Host(),
                              DR(96), DR(32));
-        DrawButton(g, c, L"Remove", 0, Hov(SHit::AccountRemove, (int)i), !busy);
-        if (!busy) AddZone(c, SHit::AccountRemove, (int)i);
+        const bool can = !busy && signIn == kSignInIdle;
+        DrawButton(g, c, L"Remove", 0, Hov(SHit::AccountRemove, (int)i), can);
+        if (can) AddZone(c, SHit::AccountRemove, (int)i);
     }
     Section(y, L"Add an account");
     PaintAddAccount(y);
 }
 
-// The form that connects an account: the service, its server, the token (created on the server's site and
-// pasted here), Connect.
+// The form that connects an account: the service and its server, then signing in with the browser (where
+// Mangrove has an OAuth app) or a token created on the server's site and pasted here.
 void SettingsWindow::PaintAddAccount(float& y) {
     Gfx& g = *gfx;
     const float pad = DR(16), labelW = DR(80);
@@ -759,6 +785,8 @@ void SettingsWindow::PaintAddAccount(float& y) {
     const float fw = std::max(DR(120), std::min(DR(520), x0 + cw - pad - fx));
     const float labelH = narrow ? DR(24) : 0.f;
     const ForgeInfo& forge = Forges()[(size_t)service];
+    const bool locked = busy || signIn != kSignInIdle;  // a token check or a sign-in is running
+    const bool browser = signIn == kSignInIdle && BrowserSignInAvailable(forge.forge, server.text);
 
     // Everything that wraps is measured first: the card is drawn before what it holds.
     std::vector<std::pair<float, float>> radios;  // offsets in the service row
@@ -782,20 +810,40 @@ void SettingsWindow::PaintAddAccount(float& y) {
         }
         return l;
     };
-    float serverHelpH = 0, tokenHelpH = 0, statusH = 0;
+    // A button that opens a page in the browser: its label, then the "new window" glyph.
+    auto linkWidth = [&](std::wstring_view label, int style) { return g.Measure(label, style == 1 ? F::UISemi : F::UI) + DR(52); };
+    auto linkButton = [&](const RectF& r, std::wstring_view label, int style, SHit id, bool enabled) {
+        const F font = style == 1 ? F::UISemi : F::UI;
+        DrawButton(g, r, L"", style, Hov(id), enabled, font);
+        const Color fg = !enabled ? TextDim : style == 1 ? TextOnAccent : Text;
+        g.Text(label, { r.x + DR(14), r.y, r.w - DR(40), r.h }, font, fg);
+        g.Glyph(0xE8A7, { r.r() - DR(30), r.y, DR(20), r.h }, F::Icon12, !enabled ? TextDim : style == 1 ? TextOnAccent : TextSec);
+        if (enabled) AddZone(r, id);
+    };
+    const std::wstring createLabel = L"Create a token", browserLabel = L"Sign in with the browser", openLabel = L"Copy the code and open GitHub";
+    float serverHelpH = 0, browserHelpH = 0, tokenHelpH = 0, statusH = 0, codeHelpH = 0;
     const ComPtr<IDWriteTextLayout> serverHelp = wrap(kServerHelp, fw, serverHelpH);
-    const ComPtr<IDWriteTextLayout> tokenHelp = wrap(forge.tokenHelp, fw, tokenHelpH);
-    const std::wstring createLabel = L"Create a token";
-    const float createW = g.Measure(createLabel, F::UI) + DR(52);
+    const ComPtr<IDWriteTextLayout> browserHelp = browser ? wrap(kBrowserHelp, fw, browserHelpH) : nullptr;
+    const ComPtr<IDWriteTextLayout> tokenHelp = signIn == kSignInIdle ? wrap(forge.tokenHelp, fw, tokenHelpH) : nullptr;
+    const ComPtr<IDWriteTextLayout> codeHelp = signIn == kSignInWaiting ? wrap(kCodeHelp, fw, codeHelpH) : nullptr;
     const float connectW = DR(112);
     const float statusX = fx + connectW + DR(12) + (busy ? DR(26) : 0.f);
-    const ComPtr<IDWriteTextLayout> statusL = wrap(status, std::max(DR(100), x0 + cw - pad - statusX), statusH);
+    const ComPtr<IDWriteTextLayout> statusL =
+        signIn == kSignInIdle ? wrap(status, std::max(DR(100), x0 + cw - pad - statusX), statusH) : nullptr;
+    const float openW = std::min(fw, linkWidth(openLabel, 1)), cancelW = DR(96);
+    const bool cancelBelow = openW + DR(8) + cancelW > fw;
 
     const float hService = labelH + ry + DR(32);
     const float hServer = labelH + DR(32) + DR(6) + serverHelpH;
+    const float hBrowser = labelH + DR(32) + DR(6) + browserHelpH;
     const float hToken = labelH + DR(32) + DR(6) + tokenHelpH + DR(10) + DR(32);
     const float hConnect = std::max(DR(32), statusH);
-    const float h = pad + hService + DR(18) + hServer + DR(18) + hToken + DR(20) + hConnect + pad;
+    const float hStarting = labelH + DR(32) + DR(12) + DR(32);
+    const float hWaiting = labelH + codeHelpH + DR(10) + DR(56) + DR(14) + DR(32) + (cancelBelow ? DR(8) + DR(32) : 0.f) + DR(12) + DR(20);
+    float h = pad + hService + DR(18) + hServer + pad;
+    if (signIn == kSignInStarting) h += DR(18) + hStarting;
+    else if (signIn == kSignInWaiting) h += DR(18) + hWaiting;
+    else h += (browser ? DR(18) + hBrowser : 0.f) + DR(18) + hToken + DR(20) + hConnect;
     const RectF card{ x0, std::round(y), cw, std::round(h) };
     y = card.b() + DR(4);
     g.FillR(card, DR(4), th::Card);
@@ -805,14 +853,18 @@ void SettingsWindow::PaintAddAccount(float& y) {
         if (narrow) g.Text(text, { fx, rowY, fw, DR(20) }, F::UI, Text);
         else g.Text(text, { x0 + pad, rowY, labelW, DR(32) }, F::UI, Text);
     };
-    auto help = [&](const ComPtr<IDWriteTextLayout>& l, float atY) {
-        if (l) g.dc()->DrawTextLayout({ fx, atY }, l.Get(), g.B(TextSec), D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+    auto help = [&](const ComPtr<IDWriteTextLayout>& l, float atY, const Color& c) {
+        if (l) g.dc()->DrawTextLayout({ fx, atY }, l.Get(), g.B(c), D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+    };
+    auto cancelButton = [&](const RectF& r) {
+        DrawButton(g, r, L"Cancel", 0, Hov(SHit::CancelSignIn), true);
+        AddZone(r, SHit::CancelSignIn);
     };
     float cy = card.y + pad;
 
     label(L"Service", cy);
     for (size_t i = 0; i < radios.size(); ++i)
-        Radio(fx + radios[i].first, cy + labelH + radios[i].second, Forges()[i].name, (int)i == service, (int)i, !busy);
+        Radio(fx + radios[i].first, cy + labelH + radios[i].second, Forges()[i].name, (int)i == service, (int)i, !locked);
     cy += hService + DR(18);
 
     label(L"Server", cy);
@@ -821,20 +873,54 @@ void SettingsWindow::PaintAddAccount(float& y) {
         fieldBox[kServer] = box;
         TextBoxFrame(g, box, focus == kServer);
         DrawEdit(g, server, { box.x + DR(10), box.y, box.w - DR(20), box.h }, F::UI, L"https://", focus == kServer && !dialog.active);
-        if (!busy) AddZone(box, SHit::Field, kServer);
-        help(serverHelp, box.b() + DR(6));
+        if (!locked) AddZone(box, SHit::Field, kServer);
+        help(serverHelp, box.b() + DR(6), TextSec);
     }
-    cy += hServer + DR(18);
+    cy += hServer;
 
+    if (signIn != kSignInIdle) {  // signing in: the code to enter on GitHub while Mangrove waits for the authorization
+        cy += DR(18);
+        label(L"Sign in", cy);
+        float sy = cy + labelH;
+        if (signIn == kSignInStarting) {
+            DrawSpinner(g, fx + DR(9), sy + DR(16), DR(7));
+            g.Text(L"Asking GitHub for a code\u2026", { fx + DR(26), sy, fw - DR(26), DR(32) }, F::UI, TextSec);
+            cancelButton({ fx, sy + DR(32) + DR(12), cancelW, DR(32) });
+            return;
+        }
+        help(codeHelp, sy, Text);
+        sy += codeHelpH + DR(10);
+        const RectF code{ fx, sy, std::min(fw, g.Measure(userCode, F::PageTitle) + DR(56)), DR(56) };
+        g.FillR(code, DR(6), InputBg);
+        g.StrokeR(code, DR(6), ControlStroke);
+        g.Text(userCode, code, F::PageTitle, Text, DWRITE_TEXT_ALIGNMENT_CENTER);
+        sy = code.b() + DR(14);
+        const RectF open{ fx, sy, openW, DR(32) };
+        linkButton(open, openLabel, 1, SHit::OpenCode, true);
+        const RectF cancel = cancelBelow ? RectF{ fx, open.b() + DR(8), cancelW, DR(32) } : RectF{ open.r() + DR(8), sy, cancelW, DR(32) };
+        cancelButton(cancel);
+        sy = cancel.b() + DR(12);
+        DrawSpinner(g, fx + DR(9), sy + DR(10), DR(7));
+        g.Text(L"Waiting for you to authorize Mangrove on GitHub\u2026", { fx + DR(26), sy, fw - DR(26), DR(20) }, F::UI, TextSec);
+        return;
+    }
+
+    if (browser) {  // the easy way, where Mangrove has an OAuth app
+        cy += DR(18);
+        label(L"Sign in", cy);
+        const RectF b{ fx, cy + labelH, std::min(fw, linkWidth(browserLabel, 1)), DR(32) };
+        linkButton(b, browserLabel, 1, SHit::SignIn, !busy);
+        help(browserHelp, b.b() + DR(6), TextSec);
+        cy += hBrowser;
+    }
+
+    cy += DR(18);
     label(L"Token", cy);
     {
         // The service's page for a new token, with its name and scopes filled in: it opens in the browser.
-        const RectF cb{ fx, cy + labelH, createW, DR(32) };
-        DrawButton(g, cb, L"", 0, Hov(SHit::CreateToken), true);
-        g.Text(createLabel, { cb.x + DR(14), cb.y, cb.w - DR(40), cb.h }, F::UI, Text);
-        g.Glyph(0xE8A7, { cb.r() - DR(30), cb.y, DR(20), cb.h }, F::Icon12, TextSec);  // opens a new window
-        AddZone(cb, SHit::CreateToken);
-        help(tokenHelp, cb.b() + DR(6));
+        const RectF cb{ fx, cy + labelH, std::min(fw, linkWidth(createLabel, 0)), DR(32) };
+        linkButton(cb, createLabel, 0, SHit::CreateToken, true);
+        help(tokenHelp, cb.b() + DR(6), TextSec);
         const RectF box{ fx, cb.b() + DR(6) + tokenHelpH + DR(10), fw, DR(32) };
         fieldBox[kToken] = box;
         TextBoxFrame(g, box, focus == kToken);
@@ -953,6 +1039,9 @@ void SettingsWindow::OnMouseDown(float x, float y, bool dbl) {
         break;
     }
     case SHit::CreateToken: CreateToken(); break;
+    case SHit::SignIn: StartSignIn(); break;
+    case SHit::OpenCode: OpenSignInPage(); break;
+    case SHit::CancelSignIn: EndSignIn(); break;
     case SHit::Connect: Connect(); break;
     case SHit::Scroll: {
         RectF th;
@@ -986,6 +1075,12 @@ bool SettingsWindow::OnKey(UINT vk) {
         else if (vk == VK_RETURN) CloseDialog(dialog.defButton);
         return true;
     }
+    if (signIn != kSignInIdle && (vk == VK_ESCAPE || vk == VK_RETURN)) {  // Esc gives up, Enter opens the page again
+        if (vk == VK_ESCAPE) EndSignIn();
+        else OpenSignInPage();
+        Invalidate();
+        return true;
+    }
     if (TextEdit* e = Field(focus)) {
         const bool masked = focus == kToken;
         switch (vk) {
@@ -1012,7 +1107,7 @@ bool SettingsWindow::OnKey(UINT vk) {
     }
     if (ctrl && vk == VK_TAB) {
         SetPage((page + (shift ? kPages - 1 : 1)) % kPages);
-    } else if (vk == VK_TAB && page == kIntegrations && !busy) {  // into the form
+    } else if (vk == VK_TAB && page == kIntegrations && !busy && signIn == kSignInIdle) {  // into the form
         FocusField(shift ? kToken : kServer);
     } else if ((ctrl && vk == 'W') || vk == VK_ESCAPE) {
         Close();
@@ -1114,7 +1209,7 @@ void SettingsWindow::Choose(int id, const RectF& r) {
 }
 
 void SettingsWindow::SetService(int i) {
-    if (busy || i < 0 || i >= (int)Forges().size() || i == service) return;
+    if (busy || signIn != kSignInIdle || i < 0 || i >= (int)Forges().size() || i == service) return;
     service = i;
     server.Set(Forges()[(size_t)i].server);
     SetStatus(L"", kInfo);
@@ -1135,7 +1230,7 @@ void SettingsWindow::CreateToken() {
 }
 
 void SettingsWindow::Connect() {
-    if (busy || Blank(token.text)) return;
+    if (busy || signIn != kSignInIdle || Blank(token.text)) return;
     const Forge f = Forges()[(size_t)service].forge;
     const std::wstring srv = server.text;
     const std::string tok = Narrow(token.text);
@@ -1151,18 +1246,83 @@ void SettingsWindow::Connect() {
 
 void SettingsWindow::TokenChecked(const TokenCheck& check, const std::string& tok) {
     busy = false;
+    Connected(check, tok, true);
+}
+
+// The end of both ways: the account is kept, or why not is shown.
+void SettingsWindow::Connected(const TokenCheck& check, const std::string& tok, bool pasted) {
     std::wstring error = check.error;
     if (check.ok && AddAccount(check.account, tok, &error)) {
-        WipeToken();
+        if (pasted) WipeToken();
         accounts = LoadAccounts();
         const std::wstring done = L"Connected as " + AccountTitle(check.account) + L".";
         if (check.note.empty()) SetStatus(done, kSuccess);
         else SetStatus(done + L" " + check.note, kWarning);
     } else {
-        SetStatus(error.empty() ? L"The token couldn't be checked." : error, kError);
-        if (hwnd) focus = kToken;
+        SetStatus(error.empty() ? L"The account couldn't be connected." : error, kError);
+        if (pasted && hwnd) focus = kToken;
     }
     Invalidate();
+}
+
+// Signing in with the browser: a worker thread asks GitHub for a code, then waits for the user to authorize
+// Mangrove on GitHub (src\core\accounts.cpp). Cancelling, or closing the window, leaves it to stop by itself.
+void SettingsWindow::StartSignIn() {
+    if (busy || signIn != kSignInIdle) return;
+    const Forge f = Forges()[(size_t)service].forge;
+    const std::wstring srv = server.text;
+    auto cancel = std::make_shared<std::atomic<bool>>(false);
+    signInCancel = cancel;
+    signIn = kSignInStarting;
+    focus = kNoField;
+    SetStatus(L"", kInfo);
+    std::thread([f, srv, cancel] {
+        std::string tok;
+        const TokenCheck check = BrowserSignIn(
+            f, srv,
+            [cancel](const DeviceCode& code) {
+                const std::wstring userCode = code.userCode, url = code.verifyUrl;
+                RunOnMain([cancel, userCode, url] {
+                    if (!*cancel) Win().CodeArrived(userCode, url);
+                });
+            },
+            *cancel, &tok);
+        RunOnMain([cancel, check, tok] {
+            if (!*cancel) Win().SignedIn(check, tok);
+        });
+    }).detach();
+    Invalidate();
+}
+
+void SettingsWindow::CodeArrived(const std::wstring& code, const std::wstring& url) {
+    if (signIn == kSignInIdle) return;
+    userCode = code;
+    verifyUrl = url;
+    signIn = kSignInWaiting;
+    Invalidate();
+}
+
+void SettingsWindow::SignedIn(const TokenCheck& check, const std::string& tok) {
+    if (signIn == kSignInIdle) return;
+    EndSignIn();
+    Connected(check, tok, false);
+}
+
+void SettingsWindow::EndSignIn() {
+    if (signInCancel) *signInCancel = true;  // the worker stops at its next look, and its results are dropped
+    signInCancel.reset();
+    signIn = kSignInIdle;
+    userCode.clear();
+    verifyUrl.clear();
+    Invalidate();
+}
+
+// The code goes to the clipboard, ready to paste on the page; the page is always the server's (BrowserSignIn
+// checks it).
+void SettingsWindow::OpenSignInPage() {
+    if (signIn != kSignInWaiting || verifyUrl.empty()) return;
+    CopyToClipboard(hwnd, userCode);
+    ShellExecuteW(hwnd, L"open", verifyUrl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 void SettingsWindow::WipeToken() {
@@ -1190,16 +1350,22 @@ void SettingsWindow::CloseDialog(int result) {
     Invalidate();
 }
 
-// States the interface test takes pictures of: 1 a token typed in (shown as bullets), the form in view;
-// 0 back to the start.
+// States the interface test takes pictures of: 1 a token typed in (shown as dots), the form in view; 2 signing
+// in with the browser, a code shown (no request is made); 0 back to the start.
 void SettingsWindow::ForSnapshot(int state) {
+    WipeToken();
+    EndSignIn();
+    focus = kNoField;
     if (state == 1) {
         token.Set(L"ghp_" + std::wstring(36, L'x'));
         focus = kToken;
         scroll.To(1e9, true);
+    } else if (state == 2) {
+        signIn = kSignInWaiting;
+        userCode = L"WDJB-MJHT";
+        verifyUrl = L"https://github.com/login/device";
+        scrollToEnd = true;
     } else {
-        WipeToken();
-        focus = kNoField;
         scroll.To(0, true);
     }
     Invalidate();

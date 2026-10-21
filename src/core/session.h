@@ -3,7 +3,7 @@
 #include "git.h"
 #include "watcher.h"
 
-// RepoSession: everything DreamTree knows and does for one open repository, shared by the Windows and the
+// RepoSession: everything Mangrove knows and does for one open repository, shared by the Windows and the
 // macOS app. Loading and live refresh, the selection and its details, search, line counts, the git
 // operations with their undo/redo stacks, and the diff of one file with its line selection.
 //
@@ -13,7 +13,7 @@
 
 // ---------------------------------------------------------------- operations
 
-// An action DreamTree performed that can be reverted. HEAD positions are "b:<branch>" or "d:<sha>".
+// An action Mangrove performed that can be reverted. HEAD positions are "b:<branch>" or "d:<sha>".
 struct UndoEntry {
     enum class Kind { Checkout, CreateBranch, Stash, Commit, Revert } kind = Kind::Checkout;
     std::wstring label;        // e.g. "checkout main"

@@ -258,7 +258,7 @@ std::wstring WriteTempFile(const std::string& bytes) {
     const char* t = getenv("TMPDIR");
     std::string dir = t && *t ? t : "/tmp";
     if (dir.back() != '/') dir += '/';
-    const std::string tmpl = dir + "dreamtree-XXXXXX";
+    const std::string tmpl = dir + "mangrove-XXXXXX";
     std::vector<char> name(tmpl.begin(), tmpl.end());
     name.push_back('\0');
     const int fd = mkstemp(name.data());
@@ -274,18 +274,26 @@ std::wstring WriteTempFile(const std::string& bytes) {
 
 void RemoveFile(const std::wstring& path) { unlink(P(path).c_str()); }
 
-std::wstring AppDataDir() {
+static std::string ConfigDir(const char* name, const char* lower) {
     const char* home = getenv("HOME");
     const std::string base = home && *home ? home : "/tmp";
 #ifdef __APPLE__
-    const std::string dir = base + "/Library/Application Support/DreamTree";
+    (void)lower;
+    return base + "/Library/Application Support/" + name;
 #else
+    (void)name;
     const char* xdg = getenv("XDG_CONFIG_HOME");
-    const std::string dir = (xdg && *xdg ? std::string(xdg) : base + "/.config") + "/dreamtree";
+    return (xdg && *xdg ? std::string(xdg) : base + "/.config") + "/" + lower;
 #endif
+}
+
+std::wstring AppDataDir() {
+    const std::string dir = ConfigDir("Mangrove", "mangrove");
     MakeDirs(dir);
     return Widen(dir);
 }
+
+std::wstring OldAppDataDir() { return Widen(ConfigDir("DreamTree", "dreamtree")); }
 
 std::wstring EnvVar(const char* name) {
     const char* v = getenv(name);
@@ -481,7 +489,7 @@ static size_t CurlHeader(char* p, size_t size, size_t n, void* response) {
     return size * n;
 }
 
-HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& headers) {
+static HttpResponse CurlRequest(const std::string& url, const std::vector<std::string>& headers, const std::string* form) {
     HttpResponse r;
     if (url.compare(0, 8, "https://") != 0) {
         r.error = "only https:// addresses are supported";
@@ -496,6 +504,11 @@ HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& hea
     }
     curl_slist* list = nullptr;
     for (const std::string& h : headers) list = curl_slist_append(list, h.c_str());
+    if (form) {  // a POST of the form
+        list = curl_slist_append(list, "Content-Type: application/x-www-form-urlencoded");
+        curl_easy_setopt(c, CURLOPT_POSTFIELDS, form->c_str());
+        curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE, (long)form->size());
+    }
     curl_easy_setopt(c, CURLOPT_URL, url.c_str());
     curl_easy_setopt(c, CURLOPT_HTTPHEADER, list);
     curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 0L);
@@ -519,13 +532,19 @@ HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& hea
     return r;
 }
 
-// The keychain: generic passwords of the service "DreamTree".
+HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& headers) { return CurlRequest(url, headers, nullptr); }
+
+HttpResponse HttpPost(const std::string& url, const std::vector<std::string>& headers, const std::string& form) {
+    return CurlRequest(url, headers, &form);
+}
+
+// The keychain: generic passwords of the service "Mangrove".
 static CFMutableDictionaryRef KeychainQuery(const std::wstring& key) {
     CFMutableDictionaryRef q = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     const std::string k = Narrow(key);
     CFStringRef account = CFStringCreateWithBytes(kCFAllocatorDefault, (const UInt8*)k.data(), (CFIndex)k.size(), kCFStringEncodingUTF8, false);
     CFDictionarySetValue(q, kSecClass, kSecClassGenericPassword);
-    CFDictionarySetValue(q, kSecAttrService, CFSTR("DreamTree"));
+    CFDictionarySetValue(q, kSecAttrService, CFSTR("Mangrove"));
     if (account) {
         CFDictionarySetValue(q, kSecAttrAccount, account);
         CFRelease(account);
@@ -577,6 +596,11 @@ HttpResponse HttpGet(const std::string&, const std::vector<std::string>&) {
     r.error = "not available on this system";
     return r;
 }
+HttpResponse HttpPost(const std::string&, const std::vector<std::string>&, const std::string&) {
+    HttpResponse r;
+    r.error = "not available on this system";
+    return r;
+}
 bool SecretSave(const std::wstring&, const std::string&, const std::wstring&) { return false; }
 bool SecretLoad(const std::wstring&, std::string&) { return false; }
 void SecretDelete(const std::wstring&) {}
@@ -620,7 +644,7 @@ RepoWatcher::RepoWatcher(const std::wstring& root, std::function<void()> cb) : i
     CFRelease(paths);
     CFRelease(path);
     if (!impl->stream) return;
-    impl->queue = dispatch_queue_create("dreamtree.watcher", DISPATCH_QUEUE_SERIAL);
+    impl->queue = dispatch_queue_create("mangrove.watcher", DISPATCH_QUEUE_SERIAL);
     FSEventStreamSetDispatchQueue(impl->stream, impl->queue);
     FSEventStreamStart(impl->stream);
 }

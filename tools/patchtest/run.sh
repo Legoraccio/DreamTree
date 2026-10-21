@@ -14,7 +14,7 @@ xcrun clang++ -std=c++20 -O2 -Wall -Wno-unused-parameter -mmacosx-version-min=12
     "$here/patchtest.cpp" "$root/src/core/git.cpp" "$root/src/core/text.cpp" "$root/src/core/platform_posix.cpp" \
     -framework CoreFoundation -framework CoreServices -framework Security -lcurl -o "$out/patchtest"
 
-repo="$(mktemp -d "${TMPDIR:-/tmp}/dreamtree-patchtest.XXXXXX")"
+repo="$(mktemp -d "${TMPDIR:-/tmp}/mangrove-patchtest.XXXXXX")"
 trap 'rm -rf "$repo"' EXIT
 g() { git -C "$repo" "$@" >/dev/null; }
 
