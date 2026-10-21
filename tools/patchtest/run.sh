@@ -1,7 +1,7 @@
 #!/bin/bash
 # Builds patchtest and runs it on a throwaway repository in the temp folder: every way of staging,
 # unstaging and discarding hunks and lines that the diff view offers, checked against git (see
-# patchtest.cpp). The macOS counterpart of run.ps1, with the same files and cases.
+# patchtest.cpp). The macOS and Linux counterpart of run.ps1, with the same files and cases.
 #
 #   ./tools/patchtest/run.sh [cases]
 set -euo pipefail
@@ -10,9 +10,16 @@ root="$(cd "$here/../.." && pwd)"
 cases="${1:-150}"
 out="$root/build/patchtest"
 mkdir -p "$out"
-xcrun clang++ -std=c++20 -O2 -Wall -Wno-unused-parameter -mmacosx-version-min=12.0 -I"$root/src/core" \
-    "$here/patchtest.cpp" "$root/src/core/git.cpp" "$root/src/core/text.cpp" "$root/src/core/platform_posix.cpp" \
-    -framework CoreFoundation -framework CoreServices -framework Security -lcurl -o "$out/patchtest"
+sources=("$here/patchtest.cpp" "$root/src/core/git.cpp" "$root/src/core/text.cpp" "$root/src/core/platform_posix.cpp")
+if [ "$(uname)" = Darwin ]; then
+    xcrun clang++ -std=c++20 -O2 -Wall -Wno-unused-parameter -mmacosx-version-min=12.0 -I"$root/src/core" "${sources[@]}" \
+        -framework CoreFoundation -framework CoreServices -framework Security -lcurl -o "$out/patchtest"
+else
+    read -r -a cflags <<<"$(pkg-config --cflags libcurl libsecret-1)"
+    read -r -a libs <<<"$(pkg-config --libs libcurl libsecret-1)"
+    "${CXX:-c++}" -std=c++20 -O2 -Wall -Wno-unused-parameter -I"$root/src/core" "${cflags[@]}" "${sources[@]}" "${libs[@]}" -pthread \
+        -o "$out/patchtest"
+fi
 
 repo="$(mktemp -d "${TMPDIR:-/tmp}/mangrove-patchtest.XXXXXX")"
 trap 'rm -rf "$repo"' EXIT

@@ -2,9 +2,9 @@
 #include "base.h"
 
 // Operating system services used by the shared core. platform_win.cpp implements them for Windows,
-// platform_posix.cpp for macOS (and other POSIX systems).
+// platform_posix.cpp for macOS and Linux (and other POSIX systems).
 //
-// Text is std::wstring throughout the core: UTF-16 on Windows, UTF-32 on macOS. Paths use the native
+// Text is std::wstring throughout the core: UTF-16 on Windows, UTF-32 on macOS and Linux. Paths use the native
 // separator; repository-relative paths from git always use '/'.
 
 #ifdef _WIN32
@@ -75,12 +75,12 @@ HttpResponse HttpGet(const std::string& url, const std::vector<std::string>& hea
 HttpResponse HttpPost(const std::string& url, const std::vector<std::string>& headers, const std::string& form);
 
 // ---------------------------------------------------------------- secrets
-// The user's credential store (Windows Credential Manager, the macOS keychain): secrets stay there, never in
-// Mangrove's files. `key` names the secret, `label` describes it to the user.
+// The user's credential store (Windows Credential Manager, the macOS keychain, the Secret Service keyring on
+// Linux): secrets stay there, never in Mangrove's files. `key` names the secret, `label` describes it to the user.
 bool SecretSave(const std::wstring& key, const std::string& secret, const std::wstring& label);
 bool SecretLoad(const std::wstring& key, std::string& secret);
 void SecretDelete(const std::wstring& key);
-std::wstring SecretStoreName();  // "Windows Credential Manager", "the macOS keychain" (for the middle of a sentence)
+std::wstring SecretStoreName();  // "Windows Credential Manager", "the macOS keychain", "the system keyring" (mid-sentence)
 
 // ---------------------------------------------------------------- threads
 // Each app installs how a function is run on its UI thread; the core posts its results through it.

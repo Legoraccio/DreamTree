@@ -1,5 +1,6 @@
-// POSIX implementation of the operating system services used by the shared core (platform.h): macOS, with
-// FSEvents for the file watcher; it also builds on other POSIX systems (without live refresh).
+// POSIX implementation of the operating system services used by the shared core (platform.h): macOS (FSEvents,
+// the keychain) and Linux (inotify, the Secret Service keyring); both use libcurl for HTTPS. It also builds on
+// other POSIX systems, without live refresh, HTTPS or a credential store.
 
 #include "platform.h"
 #include "text.h"
@@ -30,6 +31,10 @@
 #include <curl/curl.h>
 #include <dispatch/dispatch.h>
 #include <xlocale.h>
+#elif defined(__linux__)
+#include <curl/curl.h>
+#include <libsecret/secret.h>
+#include <sys/inotify.h>
 #endif
 
 extern char** environ;
@@ -322,12 +327,16 @@ std::wstring FindGit() {
     return L"/usr/bin/git";
 }
 
-// git's environment: no terminal prompts, no merge message editor, English messages; Homebrew's folders on
-// PATH so that helpers installed there (credential helpers, git-lfs) are found.
+// git's environment: no terminal prompts, no merge message editor, English messages; on macOS Homebrew's
+// folders on PATH so that helpers installed there (credential helpers, git-lfs) are found.
 const std::vector<std::string>& GitEnvironment() {
     static const std::vector<std::string> env = [] {
         std::vector<std::string> v;
+#ifdef __APPLE__
         std::string path = "/opt/homebrew/bin:/usr/local/bin";
+#else
+        std::string path = "/usr/local/bin";
+#endif
         bool hasPath = false;
         for (char** e = environ; e && *e; ++e) {
             const std::string kv = *e;
@@ -424,9 +433,12 @@ int RunProcess(const std::wstring& exe, const std::wstring& args, const std::wst
     if (rc != 0) {
         close(outPipe[0]);
         close(errPipe[0]);
-        if (err)
-            *err = rc == ENOENT ? "Git was not found. Install the Xcode Command Line Tools (xcode-select --install) or Git from Homebrew."
-                                : "Could not start git.";
+#ifdef __APPLE__
+        const char* missing = "Git was not found. Install the Xcode Command Line Tools (xcode-select --install) or Git from Homebrew.";
+#else
+        const char* missing = "Git was not found. Install it with your package manager (for example: sudo apt install git).";
+#endif
+        if (err) *err = rc == ENOENT ? missing : "Could not start git.";
         return -1;
     }
 
@@ -468,9 +480,9 @@ int RunProcess(const std::wstring& exe, const std::wstring& args, const std::wst
     return 128 + (WIFSIGNALED(status) ? WTERMSIG(status) : 0);
 }
 
-// ============================================================================ network and secrets
+// ============================================================================ network
 
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
 
 static size_t CurlBody(char* p, size_t size, size_t n, void* response) {
     auto* r = static_cast<HttpResponse*>(response);
@@ -538,6 +550,25 @@ HttpResponse HttpPost(const std::string& url, const std::vector<std::string>& he
     return CurlRequest(url, headers, &form);
 }
 
+#else  // other POSIX systems: no HTTPS client yet
+
+HttpResponse HttpGet(const std::string&, const std::vector<std::string>&) {
+    HttpResponse r;
+    r.error = "not available on this system";
+    return r;
+}
+HttpResponse HttpPost(const std::string&, const std::vector<std::string>&, const std::string&) {
+    HttpResponse r;
+    r.error = "not available on this system";
+    return r;
+}
+
+#endif
+
+// ============================================================================ secrets
+
+#ifdef __APPLE__
+
 // The keychain: generic passwords of the service "Mangrove".
 static CFMutableDictionaryRef KeychainQuery(const std::wstring& key) {
     CFMutableDictionaryRef q = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -589,18 +620,53 @@ void SecretDelete(const std::wstring& key) {
 
 std::wstring SecretStoreName() { return L"the macOS keychain"; }
 
-#else  // other POSIX systems: no HTTPS client or credential store yet
+#elif defined(__linux__)
 
-HttpResponse HttpGet(const std::string&, const std::vector<std::string>&) {
-    HttpResponse r;
-    r.error = "not available on this system";
-    return r;
+// The Secret Service (GNOME Keyring, KWallet, KeePassXC...): passwords of this schema, found by their key.
+static const SecretSchema* TokenSchema() {
+    static const SecretSchema schema = [] {
+        SecretSchema s;
+        memset(&s, 0, sizeof s);
+        s.name = "io.github.legoraccio.Mangrove";
+        s.flags = SECRET_SCHEMA_NONE;
+        s.attributes[0].name = "key";
+        s.attributes[0].type = SECRET_SCHEMA_ATTRIBUTE_STRING;
+        return s;
+    }();
+    return &schema;
 }
-HttpResponse HttpPost(const std::string&, const std::vector<std::string>&, const std::string&) {
-    HttpResponse r;
-    r.error = "not available on this system";
-    return r;
+
+bool SecretSave(const std::wstring& key, const std::string& secret, const std::wstring& label) {
+    GError* error = nullptr;
+    const std::string k = Narrow(key), l = Narrow(label);
+    const gboolean ok =
+        secret_password_store_sync(TokenSchema(), SECRET_COLLECTION_DEFAULT, l.c_str(), secret.c_str(), nullptr, &error, "key", k.c_str(), nullptr);
+    if (error) g_error_free(error);
+    return ok;
 }
+
+bool SecretLoad(const std::wstring& key, std::string& secret) {
+    GError* error = nullptr;
+    const std::string k = Narrow(key);
+    gchar* found = secret_password_lookup_sync(TokenSchema(), nullptr, &error, "key", k.c_str(), nullptr);
+    if (error) g_error_free(error);
+    if (!found) return false;
+    secret = found;
+    secret_password_free(found);
+    return true;
+}
+
+void SecretDelete(const std::wstring& key) {
+    GError* error = nullptr;
+    const std::string k = Narrow(key);
+    secret_password_clear_sync(TokenSchema(), nullptr, &error, "key", k.c_str(), nullptr);
+    if (error) g_error_free(error);
+}
+
+std::wstring SecretStoreName() { return L"the system keyring"; }
+
+#else  // other POSIX systems: no credential store yet
+
 bool SecretSave(const std::wstring&, const std::string&, const std::wstring&) { return false; }
 bool SecretLoad(const std::wstring&, std::string&) { return false; }
 void SecretDelete(const std::wstring&) {}
@@ -659,6 +725,111 @@ RepoWatcher::~RepoWatcher() {
         dispatch_sync_f(impl->queue, nullptr, [](void*) {});  // a callback still running has finished
         dispatch_release(impl->queue);
     }
+}
+
+#elif defined(__linux__)
+
+// inotify: a watch on every folder of the working tree but .git/objects, added as folders appear (up to a
+// limit), on a thread of its own that also walks the tree first. A burst of events is reported once, after
+// 0.35 s without any.
+struct RepoWatcher::Impl {
+    std::function<void()> onChange;
+    std::string root;
+    int fd = -1;
+    int stop[2] = { -1, -1 };
+    std::thread thread;
+    std::unordered_map<int, std::string> dirs;  // watch descriptor -> folder
+
+    static bool Skipped(const std::string& path) { return path.find("/.git/objects") != std::string::npos; }
+
+    void Add(const std::string& dir) {
+        if (dirs.size() >= 16384) return;  // a huge tree: the rest refreshes on demand
+        const int wd = inotify_add_watch(fd, dir.c_str(),
+                                         IN_CREATE | IN_DELETE | IN_MODIFY | IN_CLOSE_WRITE | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB |
+                                             IN_DELETE_SELF | IN_ONLYDIR | IN_DONT_FOLLOW | IN_EXCL_UNLINK);
+        if (wd >= 0) dirs[wd] = dir;
+    }
+
+    void AddTree(const std::string& dir) {
+        Add(dir);
+        DIR* h = opendir(dir.c_str());
+        if (!h) return;
+        while (dirent* e = readdir(h)) {
+            if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+            const std::string full = dir + "/" + e->d_name;
+            bool isDir = e->d_type == DT_DIR;
+            if (e->d_type == DT_UNKNOWN) {
+                struct stat st;
+                isDir = lstat(full.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+            }
+            if (isDir && !Skipped(full)) AddTree(full);
+        }
+        closedir(h);
+    }
+
+    void Run() {
+        AddTree(root);
+        std::vector<char> buf(64 * 1024);
+        bool pending = false;
+        for (;;) {
+            pollfd fds[2] = { { fd, POLLIN, 0 }, { stop[0], POLLIN, 0 } };
+            const int r = poll(fds, 2, pending ? 350 : -1);
+            if (r < 0) {
+                if (errno == EINTR) continue;
+                return;
+            }
+            if (fds[1].revents) return;
+            if (r == 0) {  // quiet again
+                pending = false;
+                onChange();
+                continue;
+            }
+            const ssize_t n = read(fd, buf.data(), buf.size());
+            if (n <= 0) continue;
+            for (char* p = buf.data(); p < buf.data() + n;) {
+                const auto* ev = reinterpret_cast<const inotify_event*>(p);
+                p += sizeof(inotify_event) + ev->len;
+                if (ev->mask & IN_Q_OVERFLOW) {
+                    pending = true;
+                    continue;
+                }
+                auto it = dirs.find(ev->wd);
+                if (it == dirs.end()) continue;
+                if (ev->mask & IN_IGNORED) {
+                    dirs.erase(it);
+                    continue;
+                }
+                const std::string path = ev->len ? it->second + "/" + ev->name : it->second;
+                if (Skipped(path)) continue;
+                if ((ev->mask & IN_ISDIR) && (ev->mask & (IN_CREATE | IN_MOVED_TO))) AddTree(path);
+                pending = true;
+            }
+        }
+    }
+};
+
+RepoWatcher::RepoWatcher(const std::wstring& root, std::function<void()> cb) : impl(std::make_unique<Impl>()) {
+    impl->onChange = std::move(cb);
+    impl->root = P(root);
+    impl->fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+    if (impl->fd < 0) return;
+    if (pipe(impl->stop) != 0) {
+        close(impl->fd);
+        impl->fd = -1;
+        return;
+    }
+    Impl* p = impl.get();
+    impl->thread = std::thread([p] { p->Run(); });
+}
+
+RepoWatcher::~RepoWatcher() {
+    if (impl->thread.joinable()) {
+        const char c = 1;
+        (void)!write(impl->stop[1], &c, 1);
+        impl->thread.join();
+    }
+    for (int f : { impl->fd, impl->stop[0], impl->stop[1] })
+        if (f >= 0) close(f);
 }
 
 #else

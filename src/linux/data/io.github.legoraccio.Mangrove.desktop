@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Mangrove
+GenericName=Git Client
+Comment=A lightweight Git client: history, diffs, commits and branches
+Exec=mangrove %F
+Icon=io.github.legoraccio.Mangrove
+Terminal=false
+Categories=Development;RevisionControl;GTK;
+Keywords=git;repository;commit;branch;diff;version control;
+StartupNotify=true

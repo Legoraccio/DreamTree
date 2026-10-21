@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The keyboard shortcuts window (Ctrl+?), which GtkApplication adds to every window. -->
+<interface>
+  <object class="GtkShortcutsWindow" id="help_overlay">
+    <property name="modal">True</property>
+    <child>
+      <object class="GtkShortcutsSection">
+        <property name="section-name">shortcuts</property>
+        <property name="max-height">12</property>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title">Windows and tabs</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">New window</property>
+                <property name="action-name">app.new-window</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">New tab</property>
+                <property name="action-name">win.new-tab</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Open a repository</property>
+                <property name="action-name">win.open</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Close the tab</property>
+                <property name="action-name">win.close-tab</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Settings</property>
+                <property name="action-name">app.preferences</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Keyboard shortcuts</property>
+                <property name="action-name">win.show-help-overlay</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Quit</property>
+                <property name="action-name">app.quit</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title">Repository</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Fetch</property>
+                <property name="action-name">win.fetch</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Pull</property>
+                <property name="action-name">win.pull</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Push</property>
+                <property name="action-name">win.push</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">New branch</property>
+                <property name="action-name">win.new-branch</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Stash the changes</property>
+                <property name="action-name">win.stash</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Pop the stash</property>
+                <property name="action-name">win.pop</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Undo the last action</property>
+                <property name="action-name">win.undo-git</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Redo</property>
+                <property name="action-name">win.redo-git</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Refresh</property>
+                <property name="action-name">win.refresh</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title">View</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">History</property>
+                <property name="action-name">win.history-page</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Uncommitted changes</property>
+                <property name="action-name">win.changes-page</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Sidebar</property>
+                <property name="action-name">win.show-sidebar</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Details</property>
+                <property name="action-name">win.show-details</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Current branch only</property>
+                <property name="action-name">win.head-only</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Search the commits</property>
+                <property name="action-name">win.find</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Next match</property>
+                <property name="action-name">win.find-next</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Previous match</property>
+                <property name="action-name">win.find-prev</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title">Commits and diffs</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Commit</property>
+                <property name="accelerator">&lt;Control&gt;Return</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Copy the commit ID</property>
+                <property name="accelerator">&lt;Control&gt;c</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Clear the selected lines, close the diff</property>
+                <property name="accelerator">Escape</property>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>

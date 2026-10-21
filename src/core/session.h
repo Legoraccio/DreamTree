@@ -3,8 +3,8 @@
 #include "git.h"
 #include "watcher.h"
 
-// RepoSession: everything Mangrove knows and does for one open repository, shared by the Windows and the
-// macOS app. Loading and live refresh, the selection and its details, search, line counts, the git
+// RepoSession: everything Mangrove knows and does for one open repository, shared by the Windows, the macOS
+// and the Linux app. Loading and live refresh, the selection and its details, search, line counts, the git
 // operations with their undo/redo stacks, and the diff of one file with its line selection.
 //
 // Methods are called on the UI thread; work runs on background threads and comes back to the UI thread

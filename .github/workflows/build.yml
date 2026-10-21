@@ -1,4 +1,4 @@
-# Builds Mangrove on macOS and on Windows and runs the tests of the shared core on both.
+# Builds Mangrove on macOS, Windows and Linux and runs the tests of the shared core on each.
 name: Build
 
 on:
@@ -69,3 +69,41 @@ jobs:
       - name: Single instance
         shell: powershell
         run: ./tools/uitest/win-single-instance.ps1
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GTK 4, libadwaita and the test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config libgtk-4-dev libadwaita-1-dev \
+            libcurl4-openssl-dev libsecret-1-dev librsvg2-common fonts-cantarell xvfb xauth dbus gnome-keyring
+      - name: Build the app
+        run: ./build-linux.sh
+      # In a session with a keyring (unlocked with a throwaway password), so that the tokens' store is tested too.
+      - name: Core tests
+        run: dbus-run-session -- bash -c 'printf mangrove-ci | gnome-keyring-daemon --unlock --components=secrets >/dev/null && MANGROVE_TEST_SECRETS=1 ./tools/coretest/run.sh'
+      - name: Patch tests
+        run: ./tools/patchtest/run.sh 60
+      - name: Package
+        run: |
+          mkdir -p build/package/Mangrove
+          cp bin/mangrove src/linux/data/install.sh src/linux/data/io.github.legoraccio.Mangrove.desktop \
+            src/linux/data/icons/scalable/apps/io.github.legoraccio.Mangrove.svg build/package/Mangrove/
+          tar -C build/package -czf bin/Mangrove-Linux.tar.gz Mangrove
+      # As it is, like the macOS zip: the artifact is this file, which keeps the program executable.
+      - uses: actions/upload-artifact@v7
+        with:
+          path: bin/Mangrove-Linux.tar.gz
+          archive: false
+      - name: Interface smoke test (window snapshots)
+        run: ./tools/uitest/linux-snapshots.sh build/snapshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-snapshots
+          path: build/snapshots
+      - name: Single instance
+        run: ./tools/uitest/linux-single-instance.sh

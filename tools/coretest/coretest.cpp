@@ -215,7 +215,12 @@ static void TestAccounts(const std::filesystem::path& dir) {
     const std::wstring deniedText = GitErrorText(denied);
     CHECK(deniedText.rfind(L"github.com refused the SSH connection", 0) == 0 && deniedText.find(L"Integrations") != std::wstring::npos);
 
-#ifdef _WIN32  // the credential store (the keychain needs a logged-in user, which CI on macOS may not have)
+    // The credential store: Windows Credential Manager; on Linux the Secret Service when the run has one
+    // (MANGROVE_TEST_SECRETS=1, as CI does); not the macOS keychain, which needs a logged-in user CI may not have.
+#if defined(_WIN32) || defined(__linux__)
+#ifdef __linux__
+    if (EnvVar("MANGROVE_TEST_SECRETS").empty()) return;
+#endif
     const Account a{ Forge::Gitea, L"https://git.example.com", L"tester", L"" };
     const std::wstring key = L"coretest:" + std::to_wstring(UnixNow());
     CHECK(SecretSave(key, "s3cret", L"Mangrove core test"));

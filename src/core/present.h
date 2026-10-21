@@ -1,8 +1,8 @@
 #pragma once
 #include "session.h"
 
-// What both apps say: the texts of the history, the details and the commit box, and the questions asked
-// before actions, so the Windows and the macOS interface read the same.
+// What the apps say: the texts of the history, the details and the commit box, and the questions asked
+// before actions, so the Windows, the macOS and the Linux interface read the same.
 
 wchar_t StatusLetter(wchar_t status);  // the letter shown for a file: M A D R C, U untracked, C conflict
 const Ref* HeadRef(const RepoData& d);  // the checked-out branch, or null

@@ -1,0 +1,79 @@
+/* Mangrove's styles, on top of libadwaita's. */
+
+.mg-scope-bar {
+  padding: 6px 10px 6px 12px;
+}
+
+button.mg-small {
+  min-height: 24px;
+  padding: 2px 10px;
+}
+
+.mg-scope-bar button.mg-small {
+  font-size: 0.9em;
+}
+
+.mg-floating {
+  margin: 18px;
+  padding: 10px 16px 11px 12px;
+  border-radius: 12px;
+  background-color: @popover_bg_color;
+  color: @popover_fg_color;
+  box-shadow: 0 1px 3px 1px alpha(black, 0.1), 0 4px 12px 1px alpha(black, 0.16), 0 0 0 1px alpha(black, 0.05);
+}
+
+.mg-notice {
+  min-width: 260px;
+}
+
+.mg-diff-header {
+  padding: 6px 12px 6px 14px;
+}
+
+.mg-letter {
+  font-weight: bold;
+}
+
+.mg-st-m { color: #c64600; }
+.mg-st-a { color: @success_color; }
+.mg-st-d { color: @error_color; }
+.mg-st-r { color: @accent_color; }
+.mg-st-u { color: #c0367a; }
+
+.mg-badge {
+  margin: 2px;
+  padding: 0 4px;
+  min-width: 8px;
+  min-height: 14px;
+  border-radius: 99px;
+  background-color: @accent_bg_color;
+  color: @accent_fg_color;
+  font-size: 0.68em;
+  font-weight: bold;
+}
+
+.mg-code {
+  font-family: monospace;
+  font-size: 2.2em;
+  font-weight: bold;
+  letter-spacing: 3px;
+}
+
+.mg-medium {
+  font-weight: 600;
+}
+
+.mg-textbox {
+  border-radius: 6px;
+  background-color: alpha(currentColor, 0.1);
+}
+
+.mg-textbox textview,
+.mg-textbox textview > text {
+  background: none;
+}
+
+.mg-textbox:focus-within {
+  outline: 2px solid alpha(@accent_color, 0.5);
+  outline-offset: -2px;
+}

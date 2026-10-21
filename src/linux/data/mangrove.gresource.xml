@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Built into the app by build-linux.sh (glib-compile-resources). -->
+<gresources>
+  <gresource prefix="/io/github/legoraccio/Mangrove">
+    <file>style.css</file>
+    <file>style-dark.css</file>
+    <file>gtk/help-overlay.ui</file>
+    <file>icons/scalable/apps/io.github.legoraccio.Mangrove.svg</file>
+    <file>icons/scalable/actions/mg-branch-symbolic.svg</file>
+    <file>icons/scalable/actions/mg-cloud-symbolic.svg</file>
+    <file>icons/scalable/actions/mg-fetch-symbolic.svg</file>
+    <file>icons/scalable/actions/mg-local-symbolic.svg</file>
+    <file>icons/scalable/actions/mg-pop-symbolic.svg</file>
+    <file>icons/scalable/actions/mg-pull-symbolic.svg</file>
+    <file>icons/scalable/actions/mg-push-symbolic.svg</file>
+    <file>icons/scalable/actions/mg-stash-symbolic.svg</file>
+    <file>icons/scalable/actions/mg-tag-symbolic.svg</file>
+  </gresource>
+</gresources>

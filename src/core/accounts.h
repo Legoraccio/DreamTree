@@ -3,7 +3,7 @@
 
 // Accounts on code hosting services (GitHub, GitLab, Gitea / Forgejo), shared by the apps. Mangrove keeps
 // the list (service, server, user name) in its settings and each access token in the user's credential store
-// (Windows Credential Manager, the macOS keychain), never in a file. Fetch, pull and push over HTTPS to an
+// (Windows Credential Manager, the macOS keychain, the Secret Service on Linux), never in a file. Fetch, pull and push over HTTPS to an
 // account's server use its token.
 
 enum class Forge : uint8_t { GitHub, GitLab, Gitea };
