@@ -872,7 +872,9 @@ void SettingsWindow::PaintAddAccount(float& y) {
         const RectF box{ fx, cy + labelH, fw, DR(32) };
         fieldBox[kServer] = box;
         TextBoxFrame(g, box, focus == kServer);
-        DrawEdit(g, server, { box.x + DR(10), box.y, box.w - DR(20), box.h }, F::UI, L"https://", focus == kServer && !dialog.active);
+        const RectF inner{ box.x + DR(10), box.y, box.w - DR(20), box.h };
+        if (locked) g.Text(server.text, inner, F::UI, TextDim);  // can't change while an account connects
+        else DrawEdit(g, server, inner, F::UI, L"https://", focus == kServer && !dialog.active);
         if (!locked) AddZone(box, SHit::Field, kServer);
         help(serverHelp, box.b() + DR(6), TextSec);
     }

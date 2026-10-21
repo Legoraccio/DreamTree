@@ -543,6 +543,14 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
     _connect.hidden = YES;
     _connect.keyEquivalent = @"";
     _open.keyEquivalent = @"\r";
+    [self fitWindow];
+}
+
+// The sheet takes the size of what it shows: the form, or the code.
+- (void)fitWindow {
+    NSView* v = self.window.contentView;
+    [v layoutSubtreeIfNeeded];
+    [self.window setContentSize:v.fittingSize];
 }
 
 - (void)endSignIn {
@@ -557,6 +565,7 @@ static NSGridView* Grid(NSArray<NSArray<NSView*>*>* rows) {
     _service.enabled = _server.enabled = YES;
     for (NSInteger i = 3; i < _grid.numberOfRows; ++i) [_grid rowAtIndex:i].hidden = NO;
     [self updateBrowser];
+    [self fitWindow];
 }
 
 // The code goes to the clipboard, ready to paste on the page; the page is always the server's (BrowserSignIn
