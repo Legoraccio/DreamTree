@@ -1,13 +1,13 @@
 # Mangrove
 
-**A lightweight, native Git client for Windows 11 and macOS.**
+**A lightweight, native Git client for Windows 11, macOS and Linux.**
 
 Mangrove opens Git repositories and shows their history as a commit graph, with local and remote
 branches, tags, stashes and uncommitted changes. It fetches, pulls and pushes, commits, stages whole
 files or single hunks and lines, and undoes what it did. Each platform gets a real native app; the Git
 logic underneath is one shared C++ core.
 
-![platforms](https://img.shields.io/badge/platforms-Windows%2011%20%7C%20macOS%2012%2B-1B2E5E)
+![platforms](https://img.shields.io/badge/platforms-Windows%2011%20%7C%20macOS%2012%2B%20%7C%20Linux%20(GTK%204)-1B2E5E)
 ![license](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-E3B341)
 
 ![Mangrove on Windows, dark theme](docs/images/windows-dark.png)
@@ -17,12 +17,13 @@ logic underneath is one shared C++ core.
 Lightness is the point of Mangrove: small apps that start at once, stay out of the way and keep up
 with huge repositories.
 
-- **Tiny, self-contained apps.** On Windows Mangrove is a single 1.2 MB executable (static C++
-  runtime, no installer, no dependencies). On macOS it is a 2.6 MB universal app (Apple silicon and
-  Intel), a 1.1 MB download.
+- **Tiny apps.** On Windows Mangrove is a single 1.2 MB executable (static C++ runtime, no
+  installer, no dependencies). On macOS it is a 2.6 MB universal app (Apple silicon and Intel), a
+  1.1 MB download. On Linux it is a 1.1 MB program, a 0.5 MB download, that uses the GTK and
+  libadwaita already on the system.
 - **Native UI, no web technology.** No Electron, no web view, no cross-platform UI toolkit and no
-  runtime to load: Win32 with Direct2D/DirectWrite on Windows, AppKit on macOS. The apps look,
-  behave and scale like the rest of the system.
+  runtime to load: Win32 with Direct2D/DirectWrite on Windows, AppKit on macOS, GTK 4 with
+  libadwaita on Linux. The apps look, behave and scale like the rest of the system.
 - **git does the git.** Mangrove runs the git that is already installed and reads its NUL-separated
   output as a stream on worker threads; log, refs, stashes and status load in parallel, and the
   interface never waits for them.
@@ -38,6 +39,11 @@ with huge repositories.
 | --- | --- |
 | ![History and details on Windows](docs/images/windows-dark.png) | ![History and details on macOS](docs/images/macos-dark.png) |
 | ![Settings on Windows: Integrations](docs/images/windows-settings-dark.png) | ![Settings on macOS: signing in with GitHub](docs/images/macos-sign-in-dark.png) |
+
+| Linux | |
+| --- | --- |
+| ![History and details on Linux](docs/images/linux-dark.png) | ![A diff on Linux, with its hunk and line actions](docs/images/linux-diff-dark.png) |
+| ![Settings on Linux: Integrations](docs/images/linux-settings-dark.png) | ![Signing in with GitHub on Linux](docs/images/linux-sign-in-dark.png) |
 
 ## Features
 
@@ -73,7 +79,7 @@ as long as nothing was pushed.
 Gitea / Forgejo (Codeberg or your own server), then fetch, pull and push without being asked for a
 password or an SSH key. See [Accounts](#accounts).
 
-**Settings.** A window of its own, by category: General, Appearance, Git, Integrations.
+**Settings.** By category: General, Appearance, Git, Integrations.
 
 **And more.** Tabs, one per repository, reopened at launch. The view refreshes by itself when the
 repository changes on disk. Repositories owned by another user account can be trusted for Mangrove
@@ -104,6 +110,23 @@ it.
 - The standard Settings window with a toolbar of panes (`⌘,`).
 - A universal app for macOS 12 or later; drop a folder on the Dock icon to open it.
 
+### On Linux
+
+- GTK 4 and libadwaita, laid out like the GNOME apps: a header bar with the repository's actions,
+  tabs that can be dragged out into a window of their own, a sidebar, adaptive dialogs and the
+  keyboard shortcuts window (`Ctrl+?`). At home on GNOME, and it works on other desktops too, on
+  Wayland or X11.
+- Follows the system's light or dark style, its accent color (libadwaita 1.6 or later) and its
+  interface font, or a fixed light or dark style.
+- Settings in a GNOME preferences dialog (`Ctrl+,`).
+- **One instance:** starting Mangrove again, even with folders on the command line, brings the open
+  window to the front and opens the folders there (through D-Bus). Another settings file
+  (`MANGROVE_SETTINGS`) is another instance.
+- Tokens in the Secret Service keyring (GNOME Keyring, KWallet, KeePassXC…) through libsecret;
+  inotify for refreshing; *Open in Terminal* opens your terminal (`xdg-terminal-exec`, Ptyxis, GNOME
+  Console, GNOME Terminal, Konsole and others).
+- Drop a folder on the window to open it.
+
 ## Accounts
 
 - **Sign in with the browser** (github.com): Mangrove asks GitHub for a one-time code and shows it;
@@ -117,9 +140,10 @@ it.
 - **Checked before it is kept.** Mangrove asks the server whom the token belongs to (the API's
   `/user`, HTTPS only, no redirects followed) and warns when it couldn't push (a classic GitHub token
   without `repo`).
-- **Kept by the system.** Tokens live in **Windows Credential Manager** or the **macOS keychain**,
-  never in Mangrove's files: `settings.ini` only lists the service, the server and the user name.
-  Removing an account deletes its token there (it stays valid on the server until you revoke it).
+- **Kept by the system.** Tokens live in **Windows Credential Manager**, the **macOS keychain** or
+  the **Secret Service** keyring on Linux, never in Mangrove's files: `settings.ini` only lists the
+  service, the server and the user name. Removing an account deletes its token there (it stays valid
+  on the server until you revoke it).
 - **Used only for its server.** For fetch, pull and push, git gets the token for that one command
   through environment variables (`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_n`, `GIT_CONFIG_VALUE_n`: an
   `http.<server>/.extraHeader`, git 2.31 or later): never on a command line, never in git's
@@ -147,13 +171,18 @@ appear. To publish your own build with your own app:
 
 ## Download
 
-Every push to `main` builds both apps on GitHub Actions: open the latest run of the
+Every push to `main` builds the three apps on GitHub Actions: open the latest run of the
 [Build workflow](https://github.com/Legoraccio/Mangrove/actions/workflows/build.yml) and download
-**Mangrove-Windows** (the executable, zipped) or **Mangrove-macOS.zip** (the app; double-click to
-unzip). You need git: [Git for Windows](https://git-scm.com/download/win) on Windows; on macOS the
-Xcode Command Line Tools (`xcode-select --install`) or Homebrew's git.
+**Mangrove-Windows** (the executable, zipped), **Mangrove-macOS.zip** (the app; double-click to
+unzip) or **Mangrove-Linux.tar.gz**. You need git: [Git for Windows](https://git-scm.com/download/win)
+on Windows; on macOS the Xcode Command Line Tools (`xcode-select --install`) or Homebrew's git; on
+Linux your distribution's (`sudo apt install git`, `sudo dnf install git`).
 
-The builds aren't signed yet, so the systems ask before the first start:
+On Linux, extract the archive and start `./mangrove`, or run `./install.sh` to put Mangrove among
+your applications (in `~/.local`, no administrator rights; `./install.sh --uninstall` removes it).
+It needs GTK 4.14 and libadwaita 1.5 or later: Ubuntu 24.04, Fedora 40, Debian 13 or newer.
+
+The Windows and macOS builds aren't signed yet, so the systems ask before the first start:
 
 - **Windows:** SmartScreen may warn about an unknown app; Smart App Control, when it is on, blocks
   unsigned apps that Microsoft's cloud doesn't know yet.
@@ -191,29 +220,57 @@ command line.
 A build runs on the Mac that made it. To give it to others, sign it with a Developer ID certificate
 and notarize it.
 
+### Linux
+
+Requirements: a C++20 compiler, GTK 4.14 and libadwaita 1.5 or later, libcurl and libsecret, with
+their development files (Ubuntu 24.04, Fedora 40, Debian 13 or newer have them all), and git:
+
+```bash
+# Ubuntu, Debian
+sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev libcurl4-openssl-dev libsecret-1-dev git
+# Fedora
+sudo dnf install gcc-c++ pkgconf-pkg-config gtk4-devel libadwaita-devel libcurl-devel libsecret-devel git
+# Arch
+sudo pacman -S --needed base-devel gtk4 libadwaita curl libsecret git
+```
+
+```bash
+./build-linux.sh             # release -> bin/mangrove
+./build-linux.sh --run       # build, then start it
+./build-linux.sh --install   # build, then install it for you (~/.local), with its menu entry and icon
+./build-linux.sh --debug     # debug build -> bin/mangrove-debug
+```
+
+The styles, the icons and the keyboard shortcuts window are compiled into the program
+(`glib-compile-resources`, part of GLib's development files).
+
 ### Icons
 
 `tools\make-icon.ps1` regenerates `src\windows\mangrove.ico` and `src\macos\AppIcon.png` (from which
-`build-mac.sh` makes the `.icns`).
+`build-mac.sh` makes the `.icns`). The Linux icon is the same design as a vector drawing,
+`src/linux/data/icons/scalable/apps/io.github.legoraccio.Mangrove.svg`.
 
 ## Tests
 
-- **`tools/coretest`** (`run.ps1` on Windows, `run.sh` on macOS): the shared core, the same on both
-  platforms: UTF-8/16/32 text, paths and command lines, the sidebar trees, interface texts, the
+- **`tools/coretest`** (`run.ps1` on Windows, `run.sh` on macOS and Linux): the shared core, the same
+  on every platform: UTF-8/16/32 text, paths and command lines, the sidebar trees, interface texts, the
   settings file, accounts (token checks, git's authorization environment, the credential store) and a
   real repository created in the temporary folder and read with git (history, refs, graph, status,
-  details, diffs, line counts).
+  details, diffs, line counts). On Linux the credential store is tested with `MANGROVE_TEST_SECRETS=1`,
+  in a session with an unlocked keyring (as CI does).
 - **`tools/patchtest`** (`run.ps1` / `run.sh`): partial patches. It stages, unstages and discards every
   hunk, every line and hundreds of random selections in a throwaway repository (files without a final
   newline, CRLF, deleted and new files, repeated blocks), and checks with `git diff` that exactly the
   selection moved, at the right lines.
-- **`tools/uitest`**: interface smoke tests. `mac-snapshots.sh` and `win-snapshots.ps1` open a
-  throwaway repository in the app, which saves pictures of its windows (history, diff, every settings
-  page; on Windows in three themes) and quits; `win-single-instance.ps1` checks that a second start
-  hands its folder to the first one. They bring windows to the front: they are meant for CI machines.
-- **GitHub Actions** (`.github/workflows/build.yml`) builds both apps on every push to `main`, runs all
-  the tests, and publishes the apps and the pictures (*mac-snapshots*, *windows-snapshots*). The
-  screenshots above come from there.
+- **`tools/uitest`**: interface smoke tests. `mac-snapshots.sh`, `win-snapshots.ps1` and
+  `linux-snapshots.sh` open a throwaway repository in the app, which saves pictures of its windows
+  (history, diff, every settings page; on Windows in three themes) and quits; `win-single-instance.ps1`
+  and `linux-single-instance.sh` check that a second start hands its folder to the first one. On
+  Windows and macOS they bring windows to the front: they are meant for CI machines. On Linux they run
+  on a virtual display (Xvfb) when there is none.
+- **GitHub Actions** (`.github/workflows/build.yml`) builds the three apps on every push to `main`,
+  runs all the tests, and publishes the apps and the pictures (*mac-snapshots*, *windows-snapshots*,
+  *linux-snapshots*). The screenshots above come from there.
 
 ## Project layout
 
@@ -224,26 +281,28 @@ and notarize it.
 | `src/core/graph.cpp` | the lanes of the commit graph |
 | `src/core/session.cpp` | `RepoSession`, an open repository: loading and refreshing, selection, details, search, queued git operations with undo and redo, diffs with line selection; results reach the interface thread as events |
 | `src/core/accounts.cpp` | GitHub, GitLab and Gitea / Forgejo accounts: the browser sign-in, token checks, git's authorization |
-| `src/core/present.cpp` | the texts and confirmation prompts both interfaces show |
+| `src/core/present.cpp` | the texts and confirmation prompts all the interfaces show |
 | `src/core/navtree.cpp` | trees of branches, remotes, tags and files; a ref's state against its remote |
 | `src/core/settings.cpp` | the shared settings file |
 | `src/core/text.cpp` | UTF-8 and wide text, paths, dates, command lines |
-| `src/core/platform_win.cpp`, `platform_posix.cpp` | system services: processes, files, git, clocks, file watching (`ReadDirectoryChangesW` / FSEvents), HTTPS (WinHTTP / libcurl), credentials (Credential Manager / keychain) |
+| `src/core/platform_win.cpp`, `platform_posix.cpp` | system services: processes, files, git, clocks, file watching (`ReadDirectoryChangesW` / FSEvents / inotify), HTTPS (WinHTTP / libcurl), credentials (Credential Manager / keychain / Secret Service) |
 | `src/windows/` | **the Windows app**: `app.cpp` (window, input, sidebar), `views.cpp` (painting, immediate mode with hit-test zones), `diffview.cpp`, `actions.cpp` (session events, dialogs, text fields), `settingswindow.cpp`, `instance.cpp` (one instance), `gfx.cpp` (Direct2D / DirectComposition), `theme.cpp`, `snapshots.cpp` (pictures for the tests) |
 | `src/macos/` | **the macOS app**, Objective-C++: `App.mm` (application, menus, restored tabs), `RepoWindow.mm` (window, toolbar, session events, prompts), `Sidebar.mm`, `History.mm`, `Details.mm`, `DiffView.mm`, `Preferences.mm` (Settings), `Bridge.mm` (text, colors, symbols) |
+| `src/linux/` | **the Linux app**, GTK 4 and libadwaita: `app.cpp` (application, one instance, shortcuts, pictures for the tests), `window.cpp` (windows and tabs, header bar, session events, prompts), `history.cpp`, `sidebar.cpp`, `details.cpp`, `files.cpp` (file lists), `diffview.cpp`, `preferences.cpp` (Settings), `ui.cpp` (drawing, the `Canvas` widget of the long lists, menus); `data/` (styles, icons, the shortcuts window, the menu entry, `install.sh`) |
 | `tools/` | icons and tests |
 
 ## Configuration
 
-Settings live in `%APPDATA%\Mangrove\settings.ini` on Windows and in
-`~/Library/Application Support/Mangrove/settings.ini` on macOS. Mangrove used to be called
-DreamTree: the first start reads DreamTree's settings (tabs, recent repositories, theme).
+Settings live in `%APPDATA%\Mangrove\settings.ini` on Windows, in
+`~/Library/Application Support/Mangrove/settings.ini` on macOS and in `~/.config/mangrove/settings.ini`
+on Linux (`$XDG_CONFIG_HOME`). Mangrove used to be called DreamTree: the first start reads
+DreamTree's settings (tabs, recent repositories, theme).
 
 Environment variables, mostly for tests:
 
 | Variable | Effect |
 | --- | --- |
-| `MANGROVE_SETTINGS=<file>` | another settings file (separate profiles, tests); on Windows, also another instance |
+| `MANGROVE_SETTINGS=<file>` | another settings file (separate profiles, tests); on Windows and Linux, also another instance |
 | `MANGROVE_DEBUG=1` | Windows: a diagnostics strip (zone under the pointer, focus, timings, cached diff layouts); the pointer can be driven by posted messages |
 | `MANGROVE_ACCENT=RRGGBB` | Windows: this accent color instead of the system's |
 | `MANGROVE_CONTRAST=1` | Windows: behave as if a contrast theme were on |
@@ -289,6 +348,28 @@ Environment variables, mostly for tests:
 | `⌘↩` | commit |
 | `Esc` | clear the line selection, then close the diff |
 | `⌘,` | settings |
+
+### Linux
+
+| Keys | Action |
+| --- | --- |
+| `Ctrl+O` / `Ctrl+T` / `Ctrl+W` | open a repository / new tab / close the tab |
+| `Ctrl+N` | new window |
+| `Ctrl+Tab`, `Alt+1`…`9` | next tab, a tab by its number |
+| `↑ ↓ PgUp PgDn Home End` | move through the commits (with a diff open: scroll it) |
+| `Ctrl+F`, `Ctrl+G` / `Shift+Ctrl+G` | search the history, next / previous result (`Enter` / `Shift+Enter` in the field too) |
+| `Ctrl+1` / `Ctrl+2` | history / uncommitted changes |
+| `Shift+Ctrl+F` / `Shift+Ctrl+P` / `Ctrl+P` | fetch / pull / push |
+| `Shift+Ctrl+N` | new branch at the selected commit |
+| `Ctrl+Alt+S` / `Shift+Ctrl+Alt+S` | stash / pop |
+| `Ctrl+Alt+Z` / `Shift+Ctrl+Alt+Z` | undo / redo the last git action (`Ctrl+Z` stays text undo) |
+| `Ctrl+R`, `F5` | reload |
+| `F9` / `Ctrl+Alt+I` | sidebar / details |
+| `Ctrl+Alt+B` | current branch only |
+| `Ctrl+C` | copy the selected commit's ID |
+| `Ctrl+Enter` | commit |
+| `Esc` | clear the line selection, then close the diff |
+| `Ctrl+,` / `Ctrl+?` / `Ctrl+Q` | settings / keyboard shortcuts / quit |
 
 ## License
 
