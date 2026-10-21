@@ -26,10 +26,12 @@ jobs:
         run: ./tools/patchtest/run.sh 60
       - name: Package
         run: ditto -c -k --keepParent bin/Mangrove.app bin/Mangrove-macOS.zip
-      - uses: actions/upload-artifact@v4
+      # Published as it is, not inside a zip of GitHub's own (which the Mac's Archive Utility can't open): the
+      # artifact is this file, Mangrove-macOS.zip, and opens with a double click.
+      - uses: actions/upload-artifact@v7
         with:
-          name: Mangrove-macOS
           path: bin/Mangrove-macOS.zip
+          archive: false
       - name: Interface smoke test (window snapshots)
         run: ./tools/uitest/mac-snapshots.sh build/snapshots
       - uses: actions/upload-artifact@v4

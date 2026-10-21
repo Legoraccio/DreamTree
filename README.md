@@ -321,8 +321,10 @@ comando.
 ./build-mac.sh --debug    # build di debug -> bin/Mangrove-debug.app
 ```
 
-L'app è firmata *ad hoc*: si avvia sul Mac dove è stata compilata. Per darla ad altri va firmata con
-un certificato Developer ID e notarizzata.
+L'app è firmata *ad hoc* e non è notarizzata: compilata su un altro Mac (per esempio scaricata dalla
+CI), macOS la blocca al primo avvio. Si sblocca una volta da *Impostazioni di Sistema › Privacy e
+sicurezza › Apri comunque*, oppure dal Terminale con `xattr -dr com.apple.quarantine Mangrove.app`.
+Per distribuirla ad altri va firmata con un certificato Developer ID e notarizzata.
 
 ### Icone
 
@@ -345,7 +347,7 @@ un certificato Developer ID e notarizzata.
   pagine delle impostazioni; su Windows anche nei temi scuro e Mangrove) e si chiude; fallisce se
   l'app si blocca o non le salva. Porta le finestre in primo piano: pensato per le macchine di CI.
 - **GitHub Actions** (`.github/workflows/build.yml`): a ogni push su `main` compila l'app su macOS e
-  su Windows, esegue i test su entrambe e pubblica gli artifact *Mangrove-macOS* (zip dell'app),
+  su Windows, esegue i test su entrambe e pubblica gli artifact *Mangrove-macOS.zip* (l'app, si apre con un doppio clic),
   *Mangrove-Windows* (exe) e le immagini delle finestre (*mac-snapshots*, *windows-snapshots*). Si
   può avviare anche a mano (*Run workflow*).
 
