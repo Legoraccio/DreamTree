@@ -56,22 +56,32 @@ put src/util.h 'int add(int a, int b);\nint sub(int a, int b);\nint mul(int a, i
 
 # ---- the app
 settings="$work/settings.ini"
-printf 'tab=%s\nactive=0\nrecent=%s\naccount=github\thttps://github.com\toctocat\tThe Octocat\n' "$repo" "$repo" >"$settings"
+# Dark appearance: the pictures of the README are taken from this run.
+printf 'tab=%s\nactive=0\nrecent=%s\ntheme=dark\naccount=github\thttps://github.com\toctocat\tThe Octocat\n' "$repo" "$repo" >"$settings"
 MANGROVE_SETTINGS="$settings" MANGROVE_SNAPSHOT="$out" "$app" >"$out/app.log" 2>&1 &
 pid=$!
 status=0
-# A real screenshot whenever the app says a step is on screen ("<step>.ready"): the system draws the glass of
-# the sidebar and of the inspector itself, and the app's own pictures can't show it.
+# Real screenshots whenever the app says a step is on screen ("<step>.ready", holding the window's number): of
+# the whole screen and of that window alone. The system draws the glass of the sidebar and of the inspector
+# itself, and the app's own pictures can't show it.
 for _ in $(seq 1 360); do
     kill -0 "$pid" 2>/dev/null || break
     for ready in "$out"/*.ready; do
         [ -e "$ready" ] || continue
         shot="${ready%.ready}-screen.png"
         [ -e "$shot" ] && continue
-        screencapture -x "$shot" &
-        cap=$!
-        for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$cap" 2>/dev/null || break; sleep 0.5; done
-        kill "$cap" 2>/dev/null || true
+        id="$(cat "$ready" 2>/dev/null || true)"
+        for kind in screen window; do
+            if [ "$kind" = window ]; then
+                [ -n "$id" ] || continue
+                screencapture -x -o -l"$id" "${ready%.ready}-window.png" &
+            else
+                screencapture -x "$shot" &
+            fi
+            cap=$!
+            for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$cap" 2>/dev/null || break; sleep 0.5; done
+            kill "$cap" 2>/dev/null || true
+        done
         touch "$shot"
     done
     sleep 0.5

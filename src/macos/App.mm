@@ -197,6 +197,13 @@ static BOOL SaveViewImage(NSView* v, NSString* path) {
     return [[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:path atomically:YES];
 }
 
+static void MarkReady(NSWindow* w, NSString* base) {
+    [[NSString stringWithFormat:@"%ld", (long)w.windowNumber] writeToFile:[base stringByAppendingPathExtension:@"ready"]
+                                                                atomically:YES
+                                                                  encoding:NSUTF8StringEncoding
+                                                                     error:nil];
+}
+
 // The tables of a view and how many rows they show, for the log.
 static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
     if ([v isKindOfClass:NSTableView.class]) [out addObject:[NSString stringWithFormat:@"%@ %ld rows", v.className, (long)((NSTableView*)v).numberOfRows]];
@@ -205,7 +212,8 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
 
 // The whole window as the views draw it, then each pane by itself: the system draws the glass of the sidebar
 // and of the inspector (macOS 26) outside the views, so the whole-window picture leaves them empty. A
-// "<name>.ready" file tells the test script to take a real screenshot now.
+// "<name>.ready" file, holding the window's number, tells the test script to take real screenshots now (of the
+// screen, and of that window).
 - (void)snapshot:(NSString*)name {
     NSWindow* w = _windows.firstObject.window;
     NSString* dir = NS(EnvVar("MANGROVE_SNAPSHOT"));
@@ -221,14 +229,14 @@ static void CountRows(NSView* v, NSMutableArray<NSString*>* out) {
             CountRows(pane, rows);
         }
     }
-    [[NSData data] writeToFile:[base stringByAppendingPathExtension:@"ready"] atomically:YES];
+    MarkReady(w, base);
     NSLog(@"snapshot %@: %@; %@", name, ok ? @"saved" : @"FAILED", [rows componentsJoinedByString:@", "]);
 }
 
 - (void)snapshotWindow:(NSWindow*)w name:(NSString*)name {
     NSString* base = [NS(EnvVar("MANGROVE_SNAPSHOT")) stringByAppendingPathComponent:name.stringByDeletingPathExtension];
     const BOOL ok = SaveViewImage(w.contentView.superview ? w.contentView.superview : w.contentView, [base stringByAppendingPathExtension:@"png"]);
-    [[NSData data] writeToFile:[base stringByAppendingPathExtension:@"ready"] atomically:YES];
+    MarkReady(w, base);
     NSLog(@"snapshot %@: %@", name, ok ? @"saved" : @"FAILED");
 }
 
